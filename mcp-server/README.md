@@ -68,12 +68,13 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Suite ajoutée le 16/09/2026 (19 tests, voir `tests/`), écrite en réaction directe à
-l'incident de redaction silencieuse documenté dans `cartographie-edumoov.md` §9 :
-plutôt que de re-vérifier au cas par cas que les champs sensibles élèves sont bien
-retirés, ces propriétés sont désormais testées automatiquement. Aucun test ne touche
-le réseau réel ni un token réel (RPC/REST mockés via `respx`, auth factice) — la
-suite tourne hors ligne, sans dépendre du refresh_token du moment.
+Suite ajoutée le 16/09/2026 (23 tests au 16/09/2026, voir `tests/`), écrite en
+réaction directe à l'incident de redaction silencieuse documenté dans
+`cartographie-edumoov.md` §9 : plutôt que de re-vérifier au cas par cas que les
+champs sensibles élèves sont bien retirés, ces propriétés sont désormais testées
+automatiquement. Aucun test ne touche le réseau réel ni un token réel (RPC/REST
+mockés via `respx`, auth factice) — la suite tourne hors ligne, sans dépendre du
+refresh_token du moment.
 
 - `tests/test_client_envelope.py` — dépaquetage de l'enveloppe REST
   (`_unwrap_rest_envelope`) et forme exacte de l'enveloppe RPC `{params, payload}`.
@@ -87,6 +88,11 @@ suite tourne hors ligne, sans dépendre du refresh_token du moment.
   `ine`/`birthday` par défaut, les inclut sur demande explicite, et refuse
   bruyamment (au lieu de renvoyer en silence) toute donnée qui ne serait pas une
   vraie liste — fermeture du trou exact qui avait causé l'incident du §9.
+- `tests/test_journal.py` (ajouté le 16/09/2026) — fige le nom de méthode RPC
+  exact et le domaine (`user.` vs `classroom.`) des 4 outils Journal, trouvés par
+  essais successifs contre l'API réelle plutôt que documentés officiellement —
+  voir cartographie §6.6. Le plus facile des tests de cette suite à casser
+  silencieusement si quelqu'un "simplifie" le nommage plus tard.
 
 ## Outils disponibles (v0)
 

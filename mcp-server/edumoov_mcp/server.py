@@ -311,3 +311,36 @@ async def edumoov_media_get_url(media_id: str, token: str | None = None) -> str:
     Voir client.py:get_media_url et cartographie-edumoov.md §6.2 pour le détail
     et l'implication sécurité (accès potentiellement non authentifié par id)."""
     return await _get_client().get_media_url(media_id, token=token)
+
+
+@mcp.tool()
+async def edumoov_journal_lessons_list(
+    user_id: str, page: int = 1, limit: int = 200
+) -> Any:
+    """Séances du cahier journal (cours/activités planifiés) d'un enseignant.
+    ⚠️ Schéma non confirmé sur données réelles (compte de test sans séance
+    saisie en ce début d'année) — voir cartographie §6.6."""
+    return await _get_client().list_journal_lessons(user_id, page=page, limit=limit)
+
+
+@mcp.tool()
+async def edumoov_journal_schedules_list(user_id: str) -> Any:
+    """Emploi du temps (créneaux hebdomadaires récurrents) d'un enseignant.
+    ⚠️ Schéma non confirmé sur données réelles — voir cartographie §6.6."""
+    return await _get_client().list_journal_schedules(user_id)
+
+
+@mcp.tool()
+async def edumoov_journal_slots_list(classroom_id: str) -> Any:
+    """Créneaux horaires du cahier journal d'une classe (récréations, pause
+    méridienne...). ⚠️ Schéma non confirmé sur données réelles — voir
+    cartographie §6.6."""
+    return await _get_client().list_journal_slots(classroom_id)
+
+
+@mcp.tool()
+async def edumoov_journal_pedagroups_list(user_id: str) -> Any:
+    """Groupes pédagogiques (sous-groupes d'élèves pour la différenciation)
+    rattachés au cahier journal d'un enseignant. ⚠️ Schéma non confirmé sur
+    données réelles — voir cartographie §6.6."""
+    return await _get_client().list_journal_pedagroups(user_id)

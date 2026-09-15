@@ -576,6 +576,47 @@ class EdumoovClient:
         )
 
     # ------------------------------------------------------------------
+    # Journal (cahier journal / emploi du temps) — POST api.edumoov.com/rpc/
+    # user.clog_*.fetch et classroom.clog_slots.fetch. Découvert le 15/09/2026
+    # via le canal WebSocket propre à l'app Journal (console navigateur,
+    # préfixe [apiQueryBuilder]), confirmé équivalent en HTTP RPC le
+    # 16/09/2026 en testant systématiquement le pattern <domaine>.<ressource>.<action>
+    # déjà identifié en §6.2/§6.3 de cartographie-edumoov.md — contrairement à
+    # Livret, le domaine correct ici est `user` (et non `classroom`) pour la
+    # plupart des ressources, cohérent avec l'URL /journal/user/{userId}.
+    # Schémas non confirmés sur données réelles : le compte de test n'a aucune
+    # séance/créneau saisi en ce début d'année scolaire (réponses vides mais
+    # HTTP 200 — enveloppe generique confirmée, contenu non caractérisé).
+    # Voir cartographie §6.6 pour le détail de la démarche, dont le cas non
+    # résolu de l'app Appel (aucun nom de méthode RPC trouvé, ~15 essais).
+    # ------------------------------------------------------------------
+    async def list_journal_lessons(
+        self, user_id: str, *, page: int = 1, limit: int = 200
+    ) -> Any:
+        """Séances du cahier journal (cours/activités planifiés) d'un
+        enseignant. Vide sur le compte de test — schéma non confirmé au-delà
+        de l'enveloppe générique {success, data, paging?}."""
+        params: dict[str, Any] = {"user_id": user_id, "page": page, "limit": limit}
+        return await self.rpc("user.clog_lessons.fetch", params)
+
+    async def list_journal_schedules(self, user_id: str) -> Any:
+        """Emploi du temps (créneaux hebdomadaires récurrents) d'un
+        enseignant. Schéma non confirmé (vide sur le compte de test)."""
+        return await self.rpc("user.clog_schedules.fetch", {"user_id": user_id})
+
+    async def list_journal_slots(self, classroom_id: str) -> Any:
+        """Créneaux horaires du cahier journal d'une classe (récréations,
+        pause méridienne, etc., visibles dans la grille hebdomadaire).
+        Schéma non confirmé (vide sur le compte de test)."""
+        return await self.rpc("classroom.clog_slots.fetch", {"classroom_id": classroom_id})
+
+    async def list_journal_pedagroups(self, user_id: str) -> Any:
+        """Groupes pédagogiques (sous-groupes d'élèves pour la
+        différenciation) rattachés au cahier journal d'un enseignant. Schéma
+        non confirmé (vide sur le compte de test)."""
+        return await self.rpc("user.clog_pedagroups.fetch", {"user_id": user_id})
+
+    # ------------------------------------------------------------------
     # Médias — GET api.edumoov.com/rpc/core.medias.file (endpoint atypique,
     # cf. avertissement sécurité ci-dessous)
     # ------------------------------------------------------------------
