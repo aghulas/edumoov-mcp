@@ -1,0 +1,15 @@
+# Données de capture réseau — contiennent de vraies données (élèves, enseignants,
+# structure de l'école). Ne JAMAIS committer, même sur un remote privé.
+captures/
+
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Secrets du prototype MCP (redondant avec mcp-server/.gitignore, au cas où des
+# commandes git sont lancées depuis la racine du repo)
+.token_store.json
+*.token.json
+.env

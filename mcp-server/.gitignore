@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.token_store.json
+*.token.json
+.env
+*.egg-info/

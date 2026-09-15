@@ -1,0 +1,19 @@
+[project]
+name = "edumoov-mcp"
+version = "0.1.0"
+description = "Serveur MCP (prototype de reverse engineering) pour les applications Edumoov"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2.0",
+    "httpx[brotli]>=0.27",
+]
+
+[project.scripts]
+edumoov-mcp = "edumoov_mcp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["edumoov_mcp*"]
