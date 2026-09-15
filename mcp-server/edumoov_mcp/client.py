@@ -48,6 +48,26 @@ def _coerce_id(value: Any) -> str:
     return str(value)
 
 
+def _unwrap_rest_envelope(payload: Any, *, context: str) -> list[dict[str, Any]]:
+    """Dépaquette une enveloppe REST {success, data: [...], pagination: {...}}.
+
+    Confirmé empiriquement (15/09/2026) sur DEUX endpoints indépendants
+    (core/classroom/{id}/pupils ET cartable/classroom/{id}/messages) avec la même
+    forme exacte — assez pour généraliser ce dépaquetage plutôt que de le refaire
+    au cas par cas à chaque nouvel endpoint REST. Si un futur endpoint s'avère
+    avoir une forme différente, cette fonction lèvera une erreur explicite plutôt
+    que de renvoyer silencieusement autre chose qu'une liste (voir l'incident de
+    redaction documenté dans list_pupils / cartography §6.1).
+    """
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"] or []
+    raise EdumoovApiError(
+        f"{context} : réponse dans un format inattendu (enveloppe {{data:...}} non "
+        f"reconnue) : {type(payload).__name__}. À vérifier manuellement avant de "
+        "supposer que c'est une liste exploitable."
+    )
+
+
 class EdumoovClient:
     """Enveloppe fine autour des deux surfaces API. Un client par process suffit."""
 
@@ -171,14 +191,7 @@ class EdumoovClient:
         envelope = await self.rest_get(
             f"core/classroom/{classroom_id}/pupils", {"classroom_id": classroom_id}
         )
-        if isinstance(envelope, dict) and "data" in envelope:
-            return envelope["data"] or []
-        # Forme inattendue : on ne masque pas l'anomalie, on la fait remonter telle
-        # quelle plutôt que de risquer un [] silencieux qui cacherait un vrai souci.
-        raise EdumoovApiError(
-            f"Réponse de /pupils dans un format inattendu (ni enveloppe {{data:...}} "
-            f"reconnue) : {type(envelope).__name__}. À vérifier manuellement."
-        )
+        return _unwrap_rest_envelope(envelope, context="GET .../pupils")
 
     async def list_cartable_items(
         self,
@@ -197,12 +210,24 @@ class EdumoovClient:
         direction: str | None = None,
         page: int | None = None,
         limit: int | None = None,
-    ) -> Any:
+    ) -> list[dict[str, Any]]:
         """Endpoint unifié du cartable — cf. cartographie §4 et §6.1.
 
         `types` couvre : activity, lesson, event, alert, info, meeting, advert,
         code, image, text. `archived=True` -> Archives, `pupil_id`+`achieved` ->
         Suivi des élèves, `type=meeting`+`meetings_start/stop` -> RDV Parents.
+
+        DÉPAQUETÉ de l'enveloppe REST (voir _unwrap_rest_envelope) — confirmé
+        empiriquement le 15/09/2026, même forme d'enveloppe que /pupils. Schéma
+        réel d'un élément (confirmé) : id, type, title, subject, subject_id, body,
+        date, created, modified, visible, archived, visibility, color, icon,
+        user_id, user, recipients[], recipients_count, medias[], events[],
+        events_count, meetings[], comments_count, likes_count, achievement,
+        achievements_count, commentable, pupil_present, template, survey,
+        form_answers, games, links, revisions, recurrence, metadata, scope_key,
+        scope_model, last_interaction. `body` contient le contenu réel du message
+        (texte du cahier de liaison/texte/vie) — sensible par nature, ne pas
+        logger.
         """
         params: dict[str, Any] = {"classroom_id": classroom_id}
         if types:
@@ -231,7 +256,8 @@ class EdumoovClient:
             params["page"] = page
         if limit is not None:
             params["limit"] = limit
-        return await self.rest_get(f"cartable/classroom/{classroom_id}/messages", params)
+        envelope = await self.rest_get(f"cartable/classroom/{classroom_id}/messages", params)
+        return _unwrap_rest_envelope(envelope, context="GET .../cartable/.../messages")
 
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
