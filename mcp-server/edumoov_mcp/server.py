@@ -87,7 +87,20 @@ async def edumoov_classroom_pupils_list(
     envisagé (contacter une famille). Ne retourne jamais les codes d'accès
     individuels des élèves (endpoint distinct, volontairement exclu)."""
     pupils = await _get_client().list_pupils(classroom_id)
-    if include_sensitive_fields or not isinstance(pupils, list):
+    if not isinstance(pupils, list):
+        # Voir l'incident documenté dans cartographie-edumoov.md §9 : une redaction
+        # qui "passe" silencieusement sur une forme de donnée inattendue est
+        # exactement le bug qui a exposé 22 fiches élève en clair. list_pupils()
+        # est censé garantir une vraie liste (voir _unwrap_rest_envelope côté
+        # client.py) ; si ce n'est plus le cas, on refuse de deviner plutôt que de
+        # risquer un retour non redacté en silence — corriger côté client.py, pas
+        # contourner ici. Couvert par tests/test_redaction.py.
+        raise TypeError(
+            "edumoov_classroom_pupils_list : list_pupils() a renvoyé "
+            f"{type(pupils).__name__} au lieu d'une liste — refus de retourner un "
+            "résultat potentiellement non redacté. Voir cartographie-edumoov.md §9."
+        )
+    if include_sensitive_fields:
         return pupils
     return [_redact_pupil(p) if isinstance(p, dict) else p for p in pupils]
 

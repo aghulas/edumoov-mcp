@@ -22,9 +22,12 @@ utilise `pip install --user -e .` à la place.)
 
 ## Authentification (prototype)
 
-Ce prototype ne fait pas (encore) le login interactif PKCE — voir
-`spec-connecteur-mcp-edumoov.md` §2 pour pourquoi (on ne sait pas encore si Keycloak
-accepte un `redirect_uri` de callback local pour le client `apps`/`edumoov`, à tester).
+Ce prototype ne fait pas le login interactif PKCE — **testé et écarté le
+16/09/2026** (voir `spec-connecteur-mcp-edumoov.md` §2) : Keycloak refuse
+d'emblée tout `redirect_uri` de callback local pour le client `apps` (liste
+blanche stricte limitée à `app.edumoov.com`/`app-beta.edumoov.com`). Cette voie
+ne peut s'ouvrir que si Edumoov enregistre lui-même un `redirect_uri` dédié —
+c'est désormais un point demandé dans la démarche officielle en cours.
 
 En attendant, il part d'un **refresh_token** récupéré manuellement depuis une session
 navigateur déjà authentifiée sur `app.edumoov.com` :
@@ -41,9 +44,11 @@ python -m edumoov_mcp.auth "<refresh_token>"
 
 Ça écrit `~/.edumoov-mcp/token.json` (permissions 600, jamais dans le dépôt — voir
 `.gitignore`). Le serveur rafraîchit ensuite automatiquement l'access_token à chaque
-appel qui en a besoin. **Le refresh_token finira par expirer** (durée non connue,
-Keycloak) — si tu vois une erreur "Rafraîchissement du token refusé", relance cette
-étape avec un refresh_token frais.
+appel qui en a besoin. **Le refresh_token finira par expirer** — durée observée en
+conditions réelles le 16/09/2026 : **3h** (`refresh_expires_in: 10800`) — si tu vois
+une erreur "Rafraîchissement du token refusé", relance cette étape avec un
+refresh_token frais. C'est la principale limite du prototype tant que la démarche
+officielle auprès d'Edumoov n'a pas abouti (voir §2 de la spec).
 
 ## Lancer le serveur
 
@@ -55,6 +60,33 @@ Le serveur parle MCP en stdio — à enregistrer comme n'importe quel serveur MC
 dans Claude Desktop / Claude Code (config `mcpServers`, commande =
 `python -m edumoov_mcp` avec le bon `cwd`/`PYTHONPATH`, ou `edumoov-mcp` directement
 si installé avec `pip install -e .`).
+
+## Tests
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+Suite ajoutée le 16/09/2026 (19 tests, voir `tests/`), écrite en réaction directe à
+l'incident de redaction silencieuse documenté dans `cartographie-edumoov.md` §9 :
+plutôt que de re-vérifier au cas par cas que les champs sensibles élèves sont bien
+retirés, ces propriétés sont désormais testées automatiquement. Aucun test ne touche
+le réseau réel ni un token réel (RPC/REST mockés via `respx`, auth factice) — la
+suite tourne hors ligne, sans dépendre du refresh_token du moment.
+
+- `tests/test_client_envelope.py` — dépaquetage de l'enveloppe REST
+  (`_unwrap_rest_envelope`) et forme exacte de l'enveloppe RPC `{params, payload}`.
+- `tests/test_security_guards.py` — `_check_allowed` (endpoint `pupils/codes`
+  bloqué), et un garde-fou structurel qui échoue si `classroom.pupils.fetch`
+  (variante RPC avec un champ `password`, jamais utilisée volontairement) est un
+  jour appelée sans revue explicite.
+- `tests/test_media_get_url.py` — comportement (atypique) de `core.medias.file` :
+  jamais de header `Authorization` envoyé, gestion de la redirection 302.
+- `tests/test_redaction.py` — `edumoov_classroom_pupils_list` retire bien
+  `ine`/`birthday` par défaut, les inclut sur demande explicite, et refuse
+  bruyamment (au lieu de renvoyer en silence) toute donnée qui ne serait pas une
+  vraie liste — fermeture du trou exact qui avait causé l'incident du §9.
 
 ## Outils disponibles (v0)
 

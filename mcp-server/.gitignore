@@ -5,3 +5,4 @@ __pycache__/
 *.token.json
 .env
 *.egg-info/
+.pytest_cache/
