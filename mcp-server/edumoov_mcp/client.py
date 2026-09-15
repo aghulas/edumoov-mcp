@@ -575,6 +575,52 @@ class EdumoovClient:
             {"app": app, "context": context, "classroom_id": classroom_id},
         )
 
+    # ------------------------------------------------------------------
+    # Médias — GET api.edumoov.com/rpc/core.medias.file (endpoint atypique,
+    # cf. avertissement sécurité ci-dessous)
+    # ------------------------------------------------------------------
+    async def get_media_url(self, media_id: str, *, token: str | None = None) -> str:
+        """Résout un id de média Edumoov en URL de téléchargement signée
+        (temporaire, hébergée sur storage.gra.cloud.ovh.net).
+
+        Détails d'implémentation confirmés empiriquement (15/09/2026) :
+        - Ne JAMAIS envoyer de header `Authorization` sur cet endpoint précis :
+          un Bearer seul, sans `token` dans l'URL, provoque un HTTP 403 — à
+          l'inverse de tous les autres endpoints RPC. D'où l'appel HTTP direct
+          ci-dessous plutôt qu'un passage par `rpc()`/`_headers()`.
+        - Le `token` optionnel (récupéré, quand disponible, depuis un objet qui
+          référence déjà ce média — ex. `classroom.settings.get` →
+          `header.logoFile`/`signatures.signatureFile`) n'est PAS vérifié par le
+          endpoint pour les médias testés : un `id` seul, sans token ni aucune
+          authentification, a suffi à obtenir la même URL signée finale (id, bon
+          token, mauvais token et absence de token ont tous renvoyé exactement le
+          même HTTP 302 vers la même URL OVH, même `temp_url_sig`).
+
+        ⚠️ Implication sécurité, volontairement PAS exploitée plus avant ici :
+        si les `media_id` sont devinables/séquentiels (ce test n'a porté que sur
+        des ids déjà légitimement accessibles au compte authentifié — aucune
+        tentative d'énumération d'autres ids n'a été faite), n'importe qui
+        connaissant un `media_id` pourrait obtenir l'URL de téléchargement d'un
+        média sans être authentifié. Voir cartographie-edumoov.md §6.2 pour le
+        détail et la recommandation de signalement à Edumoov — ce connecteur ne
+        fait qu'exposer le comportement observé de l'API telle qu'elle est.
+        """
+        params: dict[str, Any] = {"id": media_id}
+        if token:
+            params["token"] = token
+        resp = await self._http.get(
+            f"{SETTINGS.rpc_base}/core.medias.file",
+            params=params,
+            follow_redirects=False,
+        )
+        location = resp.headers.get("location")
+        if resp.status_code in (301, 302, 303, 307, 308) and location:
+            return location
+        raise EdumoovApiError(
+            f"edumoov_media_get_url : réponse inattendue (HTTP {resp.status_code}, "
+            f"pas de redirection vers une URL signée)."
+        )
+
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in (params or {}).items() if v is not None}

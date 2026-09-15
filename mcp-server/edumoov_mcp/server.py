@@ -1,6 +1,6 @@
 """Serveur MCP Edumoov (prototype).
 
-19 outils (voir spec-connecteur-mcp-edumoov.md §3) :
+20 outils (voir spec-connecteur-mcp-edumoov.md §3) :
   - edumoov_classrooms_list, edumoov_classroom_get, edumoov_classroom_pupils_list,
     edumoov_cartable_items_list (implémentés et testés en premier)
   - edumoov_school_get, edumoov_school_teachers_list, edumoov_grades_list,
@@ -11,6 +11,8 @@
   - edumoov_evaluations_list, edumoov_assessments_list, edumoov_mater_skills_list,
     edumoov_belts_list, edumoov_classroom_settings_get (Livret — RPC via /rpc/
     HTTP, découvert par capture du canal Socket.IO, voir client.py)
+  - edumoov_media_get_url (résolution d'id média en URL signée — ⚠️ endpoint dont
+    le contrôle d'accès s'est révélé faible en test, voir client.py:get_media_url)
 
 Aucun outil d'écriture. Aucun outil n'expose les codes d'accès élève (voir client.py).
 """
@@ -282,3 +284,17 @@ async def edumoov_classroom_settings_get(
     """Configuration Livret de la classe : fonctionnalités activées et barème
     de notation (utile pour interpréter les évaluations)."""
     return await _get_client().get_classroom_settings(classroom_id, app=app, context=context)
+
+
+@mcp.tool()
+async def edumoov_media_get_url(media_id: str, token: str | None = None) -> str:
+    """Résout un id de média Edumoov (ex. `logoFile`/`signatureFile` renvoyés par
+    edumoov_classroom_settings_get, ou tout autre média référencé ailleurs) en une
+    URL de téléchargement signée et temporaire.
+
+    ⚠️ Le paramètre `token` est optionnel et, d'après les tests effectués, n'est
+    pas vérifié par l'API pour les médias déjà testés : passe-le quand tu l'as
+    (il ne coûte rien), mais ne compte pas dessus comme un vrai contrôle d'accès.
+    Voir client.py:get_media_url et cartographie-edumoov.md §6.2 pour le détail
+    et l'implication sécurité (accès potentiellement non authentifié par id)."""
+    return await _get_client().get_media_url(media_id, token=token)
