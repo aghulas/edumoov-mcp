@@ -112,6 +112,54 @@ class EdumoovCapture:
         self.count += 1
         ctx.log.info(f"[edumoov-capture] #{self.count} {req.method} {host}{path} -> {record['status_code']}")
 
+    def websocket_message(self, flow: http.HTTPFlow):
+        """Capture les frames Socket.IO (api.edumoov.com) — ajouté le 15/09/2026
+        après avoir constaté que Livret (et sans doute une partie du reste de
+        l'app moderne) ne passe quasiment aucune donnée par de simples requêtes
+        HTTP : tout transite par ce canal WebSocket, invisible pour le hook
+        response() ci-dessus qui ne voit que les échanges HTTP classiques."""
+        host = flow.request.pretty_host
+        if not EDUMOOV_HOST_RE.search(host):
+            return
+        if not flow.websocket or not flow.websocket.messages:
+            return
+        msg = flow.websocket.messages[-1]
+        try:
+            text = msg.content.decode("utf-8", errors="replace") if msg.is_text else None
+        except Exception:
+            text = None
+
+        parsed = None
+        if text is not None:
+            # Frames Engine.IO/Socket.IO sont préfixées par 1-2 chiffres (type de
+            # paquet) suivis, pour les paquets "message" (42...), d'un tableau
+            # JSON [event, ...args]. On tente de sauter ce préfixe pour parser.
+            body = text
+            for i, ch in enumerate(text):
+                if not ch.isdigit():
+                    body = text[i:]
+                    break
+            try:
+                parsed = json.loads(body)
+                parsed = sample_json(parsed)
+            except Exception:
+                parsed = None
+
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "kind": "websocket",
+            "host": host,
+            "from_client": msg.from_client,
+            "is_text": msg.is_text,
+            "raw_prefix": text[:200] if text is not None else None,
+            "parsed": parsed,
+            "byte_length": len(msg.content) if msg.content else 0,
+        }
+        self.fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        self.fh.flush()
+        self.count += 1
+        ctx.log.info(f"[edumoov-capture] #{self.count} WS {host} from_client={msg.from_client} len={record['byte_length']}")
+
     def done(self):
         if self.fh:
             self.fh.close()

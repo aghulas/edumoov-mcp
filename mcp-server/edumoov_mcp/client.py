@@ -423,6 +423,158 @@ class EdumoovClient:
         envelope = await self.rest_get(f"web2print/classroom/{classroom_id}/books")
         return _unwrap_rest_envelope(envelope, context="GET .../web2print/.../books")
 
+    # ------------------------------------------------------------------
+    # Livret (edulivret) — découvert le 15/09/2026 via une 4e capture réseau
+    # ------------------------------------------------------------------
+    # Constat majeur : les données Livret (évaluations, suivi de compétences,
+    # réussites maternelle, ceintures, statistiques...) ne transitent quasiment
+    # jamais par de simples requêtes HTTP observables dans l'onglet Network du
+    # navigateur — elles passent par le canal **Socket.IO** temps réel déjà
+    # identifié (`api.edumoov.com/socket.io/`), sous forme de JSON-RPC embarqué
+    # dans les frames WebSocket : chaque appel est un message
+    # `[méthode, params, {"$tz": ..., "$token": <access_token>}]`, la réponse
+    # un ACK `[{success, data, paging?}]` — mêmes noms de méthodes
+    # (`<domaine>.<ressource>.<action>`) que la couche RPC déjà utilisée
+    # ailleurs dans ce client, mais le token voyage DANS le message plutôt que
+    # dans un header HTTP. Capturé en ajoutant un hook `websocket_message` à
+    # l'addon mitmproxy (`scripts/capture_addon.py`), les hooks HTTP classiques
+    # ne voyant jamais ces frames.
+    #
+    # Bonne nouvelle vérifiée ensuite en conditions réelles : ces méthodes
+    # répondent TOUTES très bien via notre endpoint HTTP `/rpc/` habituel
+    # (POST + enveloppe params/payload, voir rpc()) — pas besoin d'implémenter
+    # un client Socket.IO pour les utiliser depuis le connecteur.
+    #
+    # Point de vigilance découvert au passage : `classroom.pupils.fetch` (la
+    # variante RPC de la liste d'élèves, différente de la REST déjà utilisée
+    # par list_pupils()) inclut un champ `password` dans son schéma — vérifié
+    # `None` sur les 22 élèves de la classe testée, mais le nom du champ à lui
+    # seul justifie de ne JAMAIS exposer cette méthode brute dans un outil MCP
+    # sans redaction explicite si elle est utilisée un jour (voir aussi le
+    # garde-fou existant sur `pupils/codes` en REST). Non utilisée ici : les
+    # méthodes ci-dessous s'en tiennent à évaluations/suivi/réussites/ceintures.
+
+    async def list_evaluations(
+        self,
+        classroom_id: str,
+        *,
+        query: list[str] | None = None,
+        graph: list[str] | None = None,
+        order_by: str = "date:desc",
+        page: int = 1,
+        limit: int = 100,
+    ) -> Any:
+        """Évaluations du Livret (notes/résultats par matière et par période).
+
+        `query` suit la même syntaxe que le reste de l'API :
+        `["where:date:>=:YYYY-MM-DD", "where:date:<:YYYY-MM-DD"]`, observée
+        dans un appel réel avec en plus `whereNull:type` et
+        `where:success:=:false` pour ne garder que les évaluations en échec
+        sans type particulier — libre au niveau du filtre, non ré-abstrait ici.
+        Sans `query`, l'API renvoie ses résultats par défaut (comportement de
+        filtrage non garanti, voir la remarque générale sur les paramètres RPC
+        en cartographie §6.2)."""
+        params: dict[str, Any] = {
+            "classroom_id": classroom_id,
+            "orderBy": order_by,
+            "page": page,
+            "limit": limit,
+        }
+        if query is not None:
+            params["query"] = query
+        if graph is not None:
+            params["graph"] = graph
+        return await self.rpc("classroom.evaluations.fetch", params)
+
+    async def list_assessments(
+        self,
+        classroom_id: str,
+        *,
+        start: str | None = None,
+        stop: str | None = None,
+        query: list[str] | None = None,
+        page: int = 1,
+        limit: int = 100,
+    ) -> Any:
+        """Suivi de compétences par élève (section « Suivi des élèves » du
+        Livret) — enregistrements ponctuels d'acquisition, pas les évaluations
+        notées (voir list_evaluations). `query` permet par ex. de filtrer sur
+        un élève précis (`["where:pupil_id:=:<id>"]`, observé dans un appel
+        réel). Fenêtre par défaut : 1 an en arrière à 30 jours en avant, comme
+        pour list_classroom_events — à ajuster selon les périodes réelles de
+        l'établissement si besoin de précision."""
+        today = datetime.date.today()
+        params: dict[str, Any] = {
+            "classroom_id": classroom_id,
+            "start": start or (today - datetime.timedelta(days=365)).isoformat(),
+            "stop": stop or (today + datetime.timedelta(days=30)).isoformat(),
+            "page": page,
+            "limit": limit,
+        }
+        if query is not None:
+            params["query"] = query
+        return await self.rpc("classroom.assessments.fetch", params)
+
+    async def list_mater_skills(
+        self,
+        classroom_id: str,
+        *,
+        query: list[str] | None = None,
+        graph: list[str] | None = None,
+        order_by: str = "date:desc",
+        page: int = 1,
+        limit: int = 100,
+    ) -> Any:
+        """Réussites maternelle (section dédiée du Livret pour les classes de
+        maternelle — badges/réussites par domaine, distincts des évaluations
+        classiques). Même style de paramètres que list_evaluations ;
+        `graph=["skillsItems"]` observé dans un appel réel pour charger le
+        détail des compétences associées."""
+        params: dict[str, Any] = {
+            "classroom_id": classroom_id,
+            "orderBy": order_by,
+            "page": page,
+            "limit": limit,
+        }
+        if query is not None:
+            params["query"] = query
+        if graph is not None:
+            params["graph"] = graph
+        return await self.rpc("classroom.mater_skills.fetch", params)
+
+    async def list_belts(
+        self,
+        classroom_id: str,
+        *,
+        page: int = 1,
+        limit: int = 500,
+        graph: list[str] | None = None,
+    ) -> Any:
+        """Ceintures de compétences activées pour la classe (système de
+        progression par « ceintures », désactivé par défaut — voir
+        get_classroom_settings pour savoir si `LivretBelts` est actif avant
+        d'appeler ceci). Vide si aucune ceinture n'a été activée par
+        l'enseignant, ce qui n'est pas une erreur. `graph=["beltLevel"]`
+        observé dans un appel réel."""
+        params: dict[str, Any] = {"classroom_id": classroom_id, "page": page, "limit": limit}
+        if graph is not None:
+            params["graph"] = graph
+        return await self.rpc("classroom.belts.fetch", params)
+
+    async def get_classroom_settings(
+        self, classroom_id: str, *, app: str = "Livret", context: str = "all"
+    ) -> Any:
+        """Configuration Livret de la classe : fonctionnalités activées
+        (`features`, ex. `LivretBelts`, `LivretAttestations`) et barème de
+        notation configuré (`codes`) — utile pour interpréter le champ
+        `notation`/`success` des évaluations renvoyées par list_evaluations.
+        Paramètres confirmés via un appel réel :
+        {"app": "Livret", "context": "all", "classroom_id": ...}."""
+        return await self.rpc(
+            "classroom.settings.get",
+            {"app": app, "context": context, "classroom_id": classroom_id},
+        )
+
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in (params or {}).items() if v is not None}

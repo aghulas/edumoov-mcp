@@ -1,6 +1,6 @@
 """Serveur MCP Edumoov (prototype).
 
-13 outils (voir spec-connecteur-mcp-edumoov.md §3) :
+19 outils (voir spec-connecteur-mcp-edumoov.md §3) :
   - edumoov_classrooms_list, edumoov_classroom_get, edumoov_classroom_pupils_list,
     edumoov_cartable_items_list (implémentés et testés en premier)
   - edumoov_school_get, edumoov_school_teachers_list, edumoov_grades_list,
@@ -8,6 +8,9 @@
   - edumoov_classroom_recipients_list, edumoov_user_notifications_list,
     edumoov_cartable_item_comments_list, edumoov_preps_sequences_search,
     edumoov_web2print_books_list (REST)
+  - edumoov_evaluations_list, edumoov_assessments_list, edumoov_mater_skills_list,
+    edumoov_belts_list, edumoov_classroom_settings_get (Livret — RPC via /rpc/
+    HTTP, découvert par capture du canal Socket.IO, voir client.py)
 
 Aucun outil d'écriture. Aucun outil n'expose les codes d'accès élève (voir client.py).
 """
@@ -214,3 +217,68 @@ async def edumoov_preps_sequences_search(user_id: str, query: str | None = None)
 async def edumoov_web2print_books_list(classroom_id: str) -> Any:
     """Livres/exports photo d'une classe (cahier de vie)."""
     return await _get_client().list_web2print_books(classroom_id)
+
+
+@mcp.tool()
+async def edumoov_evaluations_list(
+    classroom_id: str,
+    query: list[str] | None = None,
+    graph: list[str] | None = None,
+    order_by: str = "date:desc",
+    page: int = 1,
+    limit: int = 100,
+) -> Any:
+    """Évaluations du Livret (notes/résultats par matière et par période).
+    `query` ex. : ["where:date:>=:2026-01-01", "where:date:<:2026-07-01"]."""
+    return await _get_client().list_evaluations(
+        classroom_id, query=query, graph=graph, order_by=order_by, page=page, limit=limit
+    )
+
+
+@mcp.tool()
+async def edumoov_assessments_list(
+    classroom_id: str,
+    start: str | None = None,
+    stop: str | None = None,
+    query: list[str] | None = None,
+    page: int = 1,
+    limit: int = 100,
+) -> Any:
+    """Suivi de compétences par élève (section « Suivi des élèves » du Livret).
+    `query` ex. pour un seul élève : ["where:pupil_id:=:<id>"]."""
+    return await _get_client().list_assessments(
+        classroom_id, start=start, stop=stop, query=query, page=page, limit=limit
+    )
+
+
+@mcp.tool()
+async def edumoov_mater_skills_list(
+    classroom_id: str,
+    query: list[str] | None = None,
+    graph: list[str] | None = None,
+    order_by: str = "date:desc",
+    page: int = 1,
+    limit: int = 100,
+) -> Any:
+    """Réussites maternelle (badges/réussites par domaine, classes de maternelle)."""
+    return await _get_client().list_mater_skills(
+        classroom_id, query=query, graph=graph, order_by=order_by, page=page, limit=limit
+    )
+
+
+@mcp.tool()
+async def edumoov_belts_list(
+    classroom_id: str, page: int = 1, limit: int = 500, graph: list[str] | None = None
+) -> Any:
+    """Ceintures de compétences activées pour la classe (vide si le système de
+    ceintures n'est pas activé — voir edumoov_classroom_settings_get)."""
+    return await _get_client().list_belts(classroom_id, page=page, limit=limit, graph=graph)
+
+
+@mcp.tool()
+async def edumoov_classroom_settings_get(
+    classroom_id: str, app: str = "Livret", context: str = "all"
+) -> Any:
+    """Configuration Livret de la classe : fonctionnalités activées et barème
+    de notation (utile pour interpréter les évaluations)."""
+    return await _get_client().get_classroom_settings(classroom_id, app=app, context=context)
