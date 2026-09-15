@@ -150,17 +150,24 @@ class EdumoovClient:
     # ------------------------------------------------------------------
     # Méthodes métier utilisées par les outils MCP (server.py)
     # ------------------------------------------------------------------
-    async def list_classrooms(self) -> Any:
+    async def list_classrooms(self, *, graph: list[str] | None = None) -> Any:
         """Toutes les classes visibles par l'utilisateur authentifié.
 
         Constat empirique (15/09/2026, testé en conditions réelles par [prénom]) :
-        `user.classrooms.fetch` IGNORE tout paramètre de filtrage envoyé — il
+        `user.classrooms.fetch` IGNORE tout paramètre de FILTRAGE envoyé — il
         renvoie systématiquement la liste complète des classes accessibles au
         compte (10 classes pour un compte direction sur l'école 11777, alors
         qu'un seul classroom_id avait été demandé). Documenté aussi dans
         cartographie-edumoov.md §6.2.
+
+        En revanche `graph` fonctionne bien : il charge des données liées en une
+        fois (ex. ["users"] pour les enseignants de chaque classe, avec
+        id/nom/prénom/rôle/avatar — pas de mail dans cette source). Confirmé via
+        export DevTools d'un appel navigateur réussi :
+        {"limit":50,"graph":["school","grades","users","cartableSubscription"],"page":1}.
         """
-        return await self.rpc("user.classrooms.fetch", {})
+        params = {"graph": graph} if graph else {}
+        return await self.rpc("user.classrooms.fetch", params)
 
     async def get_classroom(self, classroom_id: str) -> Any:
         """Fiche d'une classe précise, filtrée CÔTÉ CLIENT (voir list_classrooms).
@@ -190,9 +197,30 @@ class EdumoovClient:
         premier appel réel."""
         return await self.rpc("school.schools.fetch", {"school_id": school_id})
 
-    async def list_school_teachers(self, school_id: str) -> Any:
-        """Annuaire enseignants de l'école. Filtrage serveur non vérifié."""
-        return await self.rpc("school.schools.teachers", {"school_id": school_id})
+    async def list_school_teachers(self, school_id: str) -> list[dict[str, Any]]:
+        """Annuaire enseignants d'une école, agrégé depuis les classes.
+
+        Constat empirique (15/09/2026) : l'endpoint RPC dédié
+        `school.schools.teachers` reste bloqué en HTTP 412 malgré une vingtaine
+        de formes de paramètres essayées (voir cartographie-edumoov.md §6.2/§9)
+        — abandonné pour l'instant, pas de header ou de forme de corps trouvée
+        qui le débloque. Solution de repli robuste et déjà fonctionnelle :
+        `user.classrooms.fetch` avec `graph=["users"]` inclut déjà les
+        enseignants de chaque classe (id, nom, prénom, rôle TIT/ATSEM/etc.,
+        avatar) ; on agrège et déduplique ici par école, filtrée CÔTÉ CLIENT
+        comme les autres endpoints qui ignorent leurs filtres serveur (voir
+        list_classrooms). Pas de champ mail dans cette source, contrairement à
+        ce qu'on supposait avant de tester — à corriger si l'endpoint dédié
+        finit par fonctionner.
+        """
+        classrooms = await self.list_classrooms(graph=["users"])
+        teachers: dict[Any, dict[str, Any]] = {}
+        for classroom in classrooms:
+            if _coerce_id(classroom.get("school_id")) != _coerce_id(school_id):
+                continue
+            for user in classroom.get("users") or []:
+                teachers[user.get("id")] = user
+        return list(teachers.values())
 
     async def list_grades(self) -> Any:
         """Référentiel national des niveaux scolaires (TPS→CM2). Pas de paramètre :
