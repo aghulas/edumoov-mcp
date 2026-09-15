@@ -171,6 +171,34 @@ class EdumoovClient:
         mieux que celui de list_classrooms()."""
         return await self.rpc("school.classrooms.fetch", {"school_id": school_id})
 
+    async def get_school(self, school_id: str) -> Any:
+        """Fiche établissement (adresse, UAI, directeur...). Filtrage serveur par
+        `school_id` non vérifié (voir list_school_classrooms) — à confirmer au
+        premier appel réel."""
+        return await self.rpc("school.schools.fetch", {"school_id": school_id})
+
+    async def list_school_teachers(self, school_id: str) -> Any:
+        """Annuaire enseignants de l'école. Filtrage serveur non vérifié."""
+        return await self.rpc("school.schools.teachers", {"school_id": school_id})
+
+    async def list_grades(self) -> Any:
+        """Référentiel national des niveaux scolaires (TPS→CM2). Pas de paramètre :
+        c'est un référentiel global, pas une donnée liée à un compte."""
+        return await self.rpc("core.grades.fetch", {})
+
+    async def list_classroom_events(self, classroom_id: str) -> Any:
+        """Événements/créneaux d'une classe. Filtrage serveur par `classroom_id`
+        non vérifié — voir list_classrooms() pour le précédent (l'API ignore
+        parfois ses propres paramètres de filtre)."""
+        return await self.rpc("classroom.events.fetch", {"classroom_id": classroom_id})
+
+    async def get_user_settings(self) -> Any:
+        """Préférences de l'utilisateur authentifié (notifications, UI, favoris,
+        vue par défaut). Pas de paramètre envoyé : comme user.classrooms.fetch,
+        cet endpoint semble porter sur l'utilisateur du token, pas sur un id
+        explicite — à confirmer au premier appel réel."""
+        return await self.rpc("user.settings.get", {})
+
     async def list_pupils(self, classroom_id: str) -> list[dict[str, Any]]:
         """Liste des élèves d'une classe, DÉPAQUETÉE de l'enveloppe REST.
 
@@ -258,6 +286,58 @@ class EdumoovClient:
             params["limit"] = limit
         envelope = await self.rest_get(f"cartable/classroom/{classroom_id}/messages", params)
         return _unwrap_rest_envelope(envelope, context="GET .../cartable/.../messages")
+
+    async def list_recipients(self, classroom_id: str) -> list[dict[str, Any]]:
+        """Destinataires (parents/contacts) d'une classe. Forme d'enveloppe non
+        encore vérifiée pour CET endpoint précis (voir _unwrap_rest_envelope) —
+        suppose la même forme que pupils/messages jusqu'à preuve du contraire."""
+        envelope = await self.rest_get(
+            f"core/classroom/{classroom_id}/recipients", {"classroom_id": classroom_id}
+        )
+        return _unwrap_rest_envelope(envelope, context="GET .../recipients")
+
+    async def list_notifications(
+        self,
+        user_id: str,
+        *,
+        app: str | None = None,
+        scope: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Notifications d'un utilisateur. `app` observé en capture : 'Educartable'."""
+        params: dict[str, Any] = {}
+        if app:
+            params["app"] = app
+        if scope:
+            params["scope"] = scope
+        if limit is not None:
+            params["limit"] = limit
+        envelope = await self.rest_get(f"core/user/{user_id}/notifications", params)
+        return _unwrap_rest_envelope(envelope, context="GET .../notifications")
+
+    async def list_item_comments(self, classroom_id: str, key: str) -> list[dict[str, Any]]:
+        """Fil de commentaires sur un élément du cartable. `key` = l'`id` (ou uuid)
+        d'un élément renvoyé par list_cartable_items."""
+        envelope = await self.rest_get(
+            f"core/classroom/{classroom_id}/comments",
+            {"model": "message", "key": key, "thread": 1, "classroom_id": classroom_id},
+        )
+        return _unwrap_rest_envelope(envelope, context="GET .../comments")
+
+    async def search_preps_sequences(self, user_id: str, query: str | None = None) -> list[dict[str, Any]]:
+        """Recherche de séquences pédagogiques (bibliothèque partagée, voir
+        cartographie §2). Enveloppe {success, data, pagination} confirmée
+        (15/09/2026) — 6e endpoint REST sur 6 testés à suivre cette forme."""
+        params: dict[str, Any] = {}
+        if query:
+            params["q"] = query
+        envelope = await self.rest_get(f"edupreps/user/{user_id}/sequences/search", params)
+        return _unwrap_rest_envelope(envelope, context="GET .../sequences/search")
+
+    async def list_web2print_books(self, classroom_id: str) -> list[dict[str, Any]]:
+        """Livres/exports photo (cahier de vie). Même enveloppe confirmée."""
+        envelope = await self.rest_get(f"web2print/classroom/{classroom_id}/books")
+        return _unwrap_rest_envelope(envelope, context="GET .../web2print/.../books")
 
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:

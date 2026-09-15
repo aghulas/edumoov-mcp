@@ -1,10 +1,13 @@
 """Serveur MCP Edumoov (prototype).
 
-4 outils prioritaires (voir spec-connecteur-mcp-edumoov.md §7) :
-  - edumoov_classrooms_list
-  - edumoov_classroom_get
-  - edumoov_classroom_pupils_list
-  - edumoov_cartable_items_list
+13 outils (voir spec-connecteur-mcp-edumoov.md §3) :
+  - edumoov_classrooms_list, edumoov_classroom_get, edumoov_classroom_pupils_list,
+    edumoov_cartable_items_list (implémentés et testés en premier)
+  - edumoov_school_get, edumoov_school_teachers_list, edumoov_grades_list,
+    edumoov_classroom_events_list, edumoov_user_settings_get (RPC)
+  - edumoov_classroom_recipients_list, edumoov_user_notifications_list,
+    edumoov_cartable_item_comments_list, edumoov_preps_sequences_search,
+    edumoov_web2print_books_list (REST)
 
 Aucun outil d'écriture. Aucun outil n'expose les codes d'accès élève (voir client.py).
 """
@@ -128,3 +131,71 @@ async def edumoov_cartable_items_list(
         page=page,
         limit=limit,
     )
+
+
+@mcp.tool()
+async def edumoov_school_get(school_id: str) -> Any:
+    """Fiche d'un établissement (adresse, UAI, directeur...). `school_id` est
+    l'identifiant Edumoov interne de l'école (ex. '11777' pour [ecole])."""
+    return await _get_client().get_school(school_id)
+
+
+@mcp.tool()
+async def edumoov_school_teachers_list(school_id: str) -> Any:
+    """Annuaire des enseignants d'une école (id, nom, prénom, email)."""
+    return await _get_client().list_school_teachers(school_id)
+
+
+@mcp.tool()
+async def edumoov_grades_list() -> Any:
+    """Référentiel national des niveaux scolaires (TPS à CM2, avec cycle). Pas de
+    paramètre — c'est un référentiel global, pas une donnée liée à un compte."""
+    return await _get_client().list_grades()
+
+
+@mcp.tool()
+async def edumoov_classroom_events_list(classroom_id: str) -> Any:
+    """Événements/créneaux d'une classe (calendrier)."""
+    return await _get_client().list_classroom_events(classroom_id)
+
+
+@mcp.tool()
+async def edumoov_user_settings_get() -> Any:
+    """Préférences de l'utilisateur authentifié (notifications, UI, favoris, vue
+    par défaut). Porte sur l'utilisateur du token, pas de paramètre à fournir."""
+    return await _get_client().get_user_settings()
+
+
+@mcp.tool()
+async def edumoov_classroom_recipients_list(classroom_id: str) -> Any:
+    """Destinataires (parents/contacts) d'une classe."""
+    return await _get_client().list_recipients(classroom_id)
+
+
+@mcp.tool()
+async def edumoov_user_notifications_list(
+    user_id: str, app: str | None = None, scope: str | None = None, limit: int | None = None
+) -> Any:
+    """Notifications d'un utilisateur. `app` observé en capture : 'Educartable'."""
+    return await _get_client().list_notifications(user_id, app=app, scope=scope, limit=limit)
+
+
+@mcp.tool()
+async def edumoov_cartable_item_comments_list(classroom_id: str, key: str) -> Any:
+    """Fil de commentaires sur un élément du cartable. `key` = l'`id` (ou uuid) d'un
+    élément renvoyé par edumoov_cartable_items_list."""
+    return await _get_client().list_item_comments(classroom_id, key)
+
+
+@mcp.tool()
+async def edumoov_preps_sequences_search(user_id: str, query: str | None = None) -> Any:
+    """Recherche dans la bibliothèque de séquences pédagogiques (« Fiches de
+    préparation, séquences » — probablement une bibliothèque partagée, pas
+    propre à l'école, voir cartographie §2)."""
+    return await _get_client().search_preps_sequences(user_id, query=query)
+
+
+@mcp.tool()
+async def edumoov_web2print_books_list(classroom_id: str) -> Any:
+    """Livres/exports photo d'une classe (cahier de vie)."""
+    return await _get_client().list_web2print_books(classroom_id)
