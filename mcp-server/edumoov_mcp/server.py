@@ -154,9 +154,22 @@ async def edumoov_grades_list() -> Any:
 
 
 @mcp.tool()
-async def edumoov_classroom_events_list(classroom_id: str) -> Any:
-    """Événements/créneaux d'une classe (calendrier)."""
-    return await _get_client().list_classroom_events(classroom_id)
+async def edumoov_classroom_events_list(
+    classroom_id: str,
+    start: str | None = None,
+    stop: str | None = None,
+    query: list[str] | None = None,
+    graph: list[str] | None = None,
+    page: int = 1,
+) -> Any:
+    """Événements/créneaux d'une classe (calendrier).
+
+    Cet endpoint RPC exige des paramètres (pas seulement classroom_id) — voir
+    client.py::list_classroom_events. Par défaut : fenêtre de 30 jours à partir
+    d'aujourd'hui, événements confirmés (status BOOKED)."""
+    return await _get_client().list_classroom_events(
+        classroom_id, start=start, stop=stop, query=query, graph=graph, page=page
+    )
 
 
 @mcp.tool()

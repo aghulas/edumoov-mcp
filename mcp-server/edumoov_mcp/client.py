@@ -13,6 +13,7 @@ d'authentification élève (voir spec-connecteur-mcp-edumoov.md §3, dernière l
 """
 from __future__ import annotations
 
+import datetime
 from typing import Any, Iterable
 
 import httpx
@@ -102,9 +103,21 @@ class EdumoovClient:
     # Couche RPC — api.edumoov.com/rpc/<domaine>.<ressource>.<action>
     # ------------------------------------------------------------------
     async def rpc(self, method: str, params: dict[str, Any] | None = None) -> Any:
+        """Appelle une méthode RPC.
+
+        Constat empirique (15/09/2026) : le framework RPC attend une enveloppe
+        {"params": {...}, "payload": {}} et non un corps plat — confirmé via un
+        export DevTools d'un appel navigateur réussi de `classroom.events.fetch`
+        (qui échouait en HTTP 412 Precondition Failed avec un corps plat). Les
+        endpoints qui toléraient jusqu'ici un corps plat (user.classrooms.fetch,
+        etc.) le font probablement parce qu'ils ignorent leurs paramètres de
+        toute façon (voir list_classrooms) — l'enveloppe complète est donc la
+        forme sûre à utiliser partout désormais.
+        """
         _check_allowed(method)
         url = f"{SETTINGS.rpc_base}/{method}"
-        resp = await self._http.post(url, json=params or {}, headers=await self._headers())
+        body = {"params": params or {}, "payload": {}}
+        resp = await self._http.post(url, json=body, headers=await self._headers())
         if resp.status_code != 200:
             raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}")
         payload = resp.json()
@@ -186,11 +199,38 @@ class EdumoovClient:
         c'est un référentiel global, pas une donnée liée à un compte."""
         return await self.rpc("core.grades.fetch", {})
 
-    async def list_classroom_events(self, classroom_id: str) -> Any:
-        """Événements/créneaux d'une classe. Filtrage serveur par `classroom_id`
-        non vérifié — voir list_classrooms() pour le précédent (l'API ignore
-        parfois ses propres paramètres de filtre)."""
-        return await self.rpc("classroom.events.fetch", {"classroom_id": classroom_id})
+    async def list_classroom_events(
+        self,
+        classroom_id: str,
+        *,
+        start: str | None = None,
+        stop: str | None = None,
+        query: list[str] | None = None,
+        graph: list[str] | None = None,
+        page: int = 1,
+    ) -> Any:
+        """Événements/créneaux d'une classe.
+
+        Constat empirique (15/09/2026) : contrairement aux endpoints RPC déjà
+        vérifiés, celui-ci EXIGE plusieurs paramètres (pas seulement
+        classroom_id) — confirmé via export DevTools d'un appel navigateur
+        réussi : {"params": {"start":..., "stop":..., "query": ["where:status:=:BOOKED"],
+        "graph": ["registrations"], "page": 1, "classroom_id": ...}, "payload": {}}.
+        Sans eux (et sans l'enveloppe params/payload, voir rpc()), l'API
+        renvoyait HTTP 412 Precondition Failed. Par défaut ici : fenêtre de 30
+        jours à partir d'aujourd'hui, mêmes filtre/graph que l'appel réel
+        observé — tous surchargeables si besoin.
+        """
+        today = datetime.date.today()
+        params = {
+            "classroom_id": classroom_id,
+            "start": start or today.isoformat(),
+            "stop": stop or (today + datetime.timedelta(days=30)).isoformat(),
+            "query": query if query is not None else ["where:status:=:BOOKED"],
+            "graph": graph if graph is not None else ["registrations"],
+            "page": page,
+        }
+        return await self.rpc("classroom.events.fetch", params)
 
     async def get_user_settings(self) -> Any:
         """Préférences de l'utilisateur authentifié (notifications, UI, favoris,
