@@ -232,12 +232,28 @@ class EdumoovClient:
         }
         return await self.rpc("classroom.events.fetch", params)
 
-    async def get_user_settings(self) -> Any:
+    async def get_user_settings(self, *, user_id: str | None = None, app: str = "educartable") -> Any:
         """Préférences de l'utilisateur authentifié (notifications, UI, favoris,
-        vue par défaut). Pas de paramètre envoyé : comme user.classrooms.fetch,
-        cet endpoint semble porter sur l'utilisateur du token, pas sur un id
-        explicite — à confirmer au premier appel réel."""
-        return await self.rpc("user.settings.get", {})
+        vue par défaut).
+
+        Constat empirique (15/09/2026) : contrairement à user.classrooms.fetch,
+        cet endpoint EXIGE explicitement `id` (l'id utilisateur, pas déduit du
+        token) et `app` (quelle application — "educartable" observé dans un
+        appel réel). Sans ces deux paramètres, HTTP 412 Precondition Failed.
+        Confirmé via export DevTools d'un appel navigateur réussi :
+        {"params": {"id": 284395, "app": "educartable"}, "payload": {}}.
+        `user_id` retombe sur EDUMOOV_DEFAULT_USER_ID si non fourni."""
+        resolved_user_id = user_id or SETTINGS.default_user_id
+        if not resolved_user_id:
+            raise EdumoovApiError(
+                "get_user_settings nécessite un identifiant utilisateur (paramètre "
+                "user_id, ou variable d'environnement EDUMOOV_DEFAULT_USER_ID)"
+            )
+        try:
+            resolved_user_id = int(resolved_user_id)
+        except (TypeError, ValueError):
+            pass
+        return await self.rpc("user.settings.get", {"id": resolved_user_id, "app": app})
 
     async def list_pupils(self, classroom_id: str) -> list[dict[str, Any]]:
         """Liste des élèves d'une classe, DÉPAQUETÉE de l'enveloppe REST.

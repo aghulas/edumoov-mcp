@@ -173,10 +173,12 @@ async def edumoov_classroom_events_list(
 
 
 @mcp.tool()
-async def edumoov_user_settings_get() -> Any:
+async def edumoov_user_settings_get(user_id: str | None = None, app: str = "educartable") -> Any:
     """Préférences de l'utilisateur authentifié (notifications, UI, favoris, vue
-    par défaut). Porte sur l'utilisateur du token, pas de paramètre à fournir."""
-    return await _get_client().get_user_settings()
+    par défaut). Exige un id utilisateur explicite (retombe sur
+    EDUMOOV_DEFAULT_USER_ID si non fourni) et le nom de l'app concernée
+    (défaut "educartable") — voir client.py::get_user_settings."""
+    return await _get_client().get_user_settings(user_id=user_id, app=app)
 
 
 @mcp.tool()
