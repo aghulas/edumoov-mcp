@@ -13,3 +13,9 @@ __pycache__/
 .token_store.json
 *.token.json
 .env
+
+# Genere par scripts/analyze_capture.py a partir de captures/ - contient des
+# echantillons de vraies donnees (noms, emails) issues de la capture reseau.
+# Ne JAMAIS committer.
+docs/api_inventory.json
+docs/api_inventory.md
