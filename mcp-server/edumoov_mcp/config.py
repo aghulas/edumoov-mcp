@@ -35,6 +35,23 @@ class Settings:
         )
     )
 
+    # --- Réauthentification automatique via navigateur (voir auth.py, browser_auth.py) ---
+    # Quand le refresh_token lui-même est expiré (HTTP 400/401 de Keycloak au refresh),
+    # le serveur MCP déclenche automatiquement `python -m edumoov_mcp.browser_auth refresh`
+    # (sous-processus, même venv) plutôt que d'échouer immédiatement — voir cartographie
+    # §6.8/§9 pour le contexte (incident du 17/09/2026 qui a motivé cet ajout). Échappatoire
+    # au cas où une fenêtre Chrome ne serait pas souhaitable (ex. usage headless/CI) :
+    # EDUMOOV_AUTO_BROWSER_REAUTH=0.
+    auto_browser_reauth: bool = os.environ.get(
+        "EDUMOOV_AUTO_BROWSER_REAUTH", "1"
+    ).lower() not in ("0", "false", "non", "no")
+    # Délai maximum (secondes) accordé au sous-processus de réauth avant abandon. Le mode
+    # "refresh" de browser_auth.py utilise déjà un budget interne de 120s (voir ce module) ;
+    # cette valeur ajoute la marge du sous-processus lui-même (démarrage Python, Playwright).
+    browser_reauth_timeout_seconds: int = int(
+        os.environ.get("EDUMOOV_BROWSER_REAUTH_TIMEOUT", "150")
+    )
+
     # --- Identifiants "pivots" pratiques pour l'usage personnel (optionnels) ---
     # Permettent de ne pas avoir à les répéter à chaque appel d'outil si l'utilisateur
     # ne travaille que sur une école/classe. Un outil peut toujours les surcharger.

@@ -38,7 +38,10 @@ async def test_list_journal_schedules_calls_user_domain(tmp_path):
     result = await client.list_journal_schedules("284395")
     assert result == []
     sent = json.loads(route.calls.last.request.content)
-    assert sent == {"params": {"user_id": "284395"}, "payload": {}}
+    assert sent == {
+        "params": {"user_id": "284395", "page": 1, "limit": 50},
+        "payload": {},
+    }  # page/limit désormais explicites — voir client.py:_rpc_all_pages (17/09/2026)
     await client.aclose()
 
 
@@ -54,7 +57,10 @@ async def test_list_journal_slots_calls_classroom_domain(tmp_path):
     result = await client.list_journal_slots("44571")
     assert result == []
     sent = json.loads(route.calls.last.request.content)
-    assert sent == {"params": {"classroom_id": "44571"}, "payload": {}}
+    assert sent == {
+        "params": {"classroom_id": "44571", "page": 1, "limit": 50},
+        "payload": {},
+    }  # page/limit désormais explicites — voir client.py:_rpc_all_pages (17/09/2026)
     await client.aclose()
 
 
@@ -67,5 +73,8 @@ async def test_list_journal_pedagroups_calls_user_domain(tmp_path):
     result = await client.list_journal_pedagroups("284395")
     assert result == []
     sent = json.loads(route.calls.last.request.content)
-    assert sent == {"params": {"user_id": "284395"}, "payload": {}}
+    assert sent == {
+        "params": {"user_id": "284395", "page": 1, "limit": 50},
+        "payload": {},
+    }  # page/limit désormais explicites — voir client.py:_rpc_all_pages (17/09/2026)
     await client.aclose()

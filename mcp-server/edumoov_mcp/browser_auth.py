@@ -107,7 +107,10 @@ def _run(timeout_seconds: int) -> None:
                 expires_at=time.time() + float(body.get("expires_in", 60)),
             )
             TokenStore().save(data)
-            print(f"Token rafraichi et enregistre dans {SETTINGS.token_store_path}.")
+            # stderr, pas stdout : ce module peut desormais etre invoque comme
+            # sous-processus depuis l'auth automatique du serveur MCP (voir auth.py),
+            # dont le stdout est le canal JSON-RPC — n'y jamais rien ecrire.
+            print(f"Token rafraichi et enregistre dans {SETTINGS.token_store_path}.", file=sys.stderr)
         finally:
             context.close()
 

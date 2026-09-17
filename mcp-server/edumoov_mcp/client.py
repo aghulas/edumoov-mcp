@@ -125,6 +125,62 @@ class EdumoovClient:
             raise EdumoovApiError(f"RPC {method} a répondu success=false : {payload}")
         return payload.get("data")
 
+    async def _rpc_all_pages(
+        self, method: str, params: dict[str, Any] | None = None, *, page_size: int = 50
+    ) -> list[dict[str, Any]]:
+        """Comme `rpc()`, mais boucle sur toutes les pages si l'endpoint pagine.
+
+        Incident du 17/09/2026 (voir cartographie-edumoov.md §9 et list_classrooms
+        ci-dessous) : `user.classrooms.fetch` pagine bel et bien ses résultats, avec
+        un défaut SILENCIEUX de `limit=10` si on ne précise rien — ce qui avait fait
+        disparaître 5 classes sur 15 (et par ricochet leurs 5 enseignants de
+        `list_school_teachers`) sans la moindre erreur, juste une liste incomplète
+        renvoyée avec `success: true`. Diagnostiqué en comparant le compte réel de
+        classes visible dans l'interface Edumoov (15) à celui renvoyé par le
+        connecteur (10), puis confirmé en inspectant le champ `paging` de la réponse
+        brute (`{"page":1,"limit":10,"pages":2,"total":15,"next":true,...}`), resté
+        invisible jusqu'ici car `rpc()` ne renvoie que `payload["data"]`.
+
+        Leçon générale qui motive cette méthode plutôt qu'un simple correctif ponctuel
+        sur `list_classrooms` : les paramètres de FILTRAGE (`classroom_id`, etc.) sont
+        bien ignorés par plusieurs endpoints RPC (voir list_classrooms), mais rien ne
+        garantit qu'un endpoint RPC tienne en une seule page — ne plus jamais supposer
+        qu'un appel RPC sans pagination explicite renvoie tout, sans avoir vérifié son
+        champ `paging`.
+        """
+        _check_allowed(method)
+        url = f"{SETTINGS.rpc_base}/{method}"
+        all_rows: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            body_params = dict(params or {})
+            body_params["page"] = page
+            body_params["limit"] = page_size
+            resp = await self._http.post(
+                url, json={"params": body_params, "payload": {}}, headers=await self._headers()
+            )
+            if resp.status_code != 200:
+                raise EdumoovApiError(f"RPC {method} (page {page}) : HTTP {resp.status_code}")
+            payload = resp.json()
+            if not payload.get("success", False):
+                raise EdumoovApiError(
+                    f"RPC {method} (page {page}) a répondu success=false : {payload}"
+                )
+            all_rows.extend(payload.get("data") or [])
+            paging = payload.get("paging") or {}
+            if not paging.get("next"):
+                break
+            page += 1
+            if page > 50:
+                # Garde-fou anti-boucle infinie si l'API renvoie un `paging`
+                # incohérent (next toujours true) — mieux vaut échouer bruyamment
+                # que boucler indéfiniment ou renvoyer une liste tronquée en silence.
+                raise EdumoovApiError(
+                    f"RPC {method} : pagination interrompue après 50 pages "
+                    "(paging incohérent côté API ?)."
+                )
+        return all_rows
+
     # ------------------------------------------------------------------
     # Couche REST classique — www.edumoov.com/api/1.0/...
     # ------------------------------------------------------------------
@@ -154,20 +210,31 @@ class EdumoovClient:
         """Toutes les classes visibles par l'utilisateur authentifié.
 
         Constat empirique (15/09/2026, testé en conditions réelles par [prénom]) :
-        `user.classrooms.fetch` IGNORE tout paramètre de FILTRAGE envoyé — il
-        renvoie systématiquement la liste complète des classes accessibles au
-        compte (10 classes pour un compte direction sur l'école 11777, alors
-        qu'un seul classroom_id avait été demandé). Documenté aussi dans
+        `user.classrooms.fetch` IGNORE tout paramètre de FILTRAGE envoyé (ex. un
+        `classroom_id` précis) — il renvoie la liste des classes accessibles au
+        compte plutôt qu'une classe unique. Documenté aussi dans
         cartographie-edumoov.md §6.2.
 
-        En revanche `graph` fonctionne bien : il charge des données liées en une
-        fois (ex. ["users"] pour les enseignants de chaque classe, avec
+        **Correction importante (17/09/2026)** : l'affirmation initiale selon
+        laquelle cet appel renvoyait « systématiquement la liste complète » était
+        FAUSSE — l'endpoint pagine silencieusement (défaut `limit=10`), ce qui a
+        fait disparaître 5 classes sur 15 de l'école (et leurs enseignants,
+        propagé à `list_school_teachers`) sans aucune erreur. Voir
+        `_rpc_all_pages` et cartographie-edumoov.md §9 pour le détail complet de
+        l'incident et le correctif : cette méthode boucle désormais sur toutes
+        les pages plutôt que de s'arrêter à la première.
+
+        `graph` fonctionne bien : il charge des données liées en une fois (ex.
+        ["users"] pour les enseignants de chaque classe, avec
         id/nom/prénom/rôle/avatar — pas de mail dans cette source). Confirmé via
         export DevTools d'un appel navigateur réussi :
-        {"limit":50,"graph":["school","grades","users","cartableSubscription"],"page":1}.
+        {"limit":50,"graph":["school","grades","users","cartableSubscription"],"page":1}
+        — un appel qui, avec le recul, donnait déjà la bonne intuition (`limit`
+        explicite) sans qu'on en tire la conséquence sur le comportement par
+        défaut sans ce paramètre.
         """
         params = {"graph": graph} if graph else {}
-        return await self.rpc("user.classrooms.fetch", params)
+        return await self._rpc_all_pages("user.classrooms.fetch", params)
 
     async def get_classroom(self, classroom_id: str) -> Any:
         """Fiche d'une classe précise, filtrée CÔTÉ CLIENT (voir list_classrooms).
@@ -188,8 +255,15 @@ class EdumoovClient:
     async def list_school_classrooms(self, school_id: str) -> Any:
         """Idem : `school_id` n'a pas été vérifié comme filtrant réellement côté
         serveur — à confirmer. En attendant, ne PAS supposer que ce filtre marche
-        mieux que celui de list_classrooms()."""
-        return await self.rpc("school.classrooms.fetch", {"school_id": school_id})
+        mieux que celui de list_classrooms(). Pas encore câblé à un outil MCP actif
+        (voir server.py) au 17/09/2026.
+
+        Pagine comme `user.classrooms.fetch` (même défaut silencieux `limit=10`,
+        vérifié empiriquement le 17/09/2026 — voir `_rpc_all_pages` et
+        cartographie-edumoov.md §9) — corrigé ici par précaution avant même d'être
+        câblée à un outil, pour ne pas propager le même piège si elle l'est un jour.
+        """
+        return await self._rpc_all_pages("school.classrooms.fetch", {"school_id": school_id})
 
     async def get_school(self, school_id: str) -> Any:
         """Fiche établissement (adresse, UAI, directeur...). Filtrage serveur par
@@ -224,8 +298,13 @@ class EdumoovClient:
 
     async def list_grades(self) -> Any:
         """Référentiel national des niveaux scolaires (TPS→CM2). Pas de paramètre :
-        c'est un référentiel global, pas une donnée liée à un compte."""
-        return await self.rpc("core.grades.fetch", {})
+        c'est un référentiel global, pas une donnée liée à un compte.
+
+        Pagine (confirmé le 17/09/2026, même défaut silencieux `limit=10` que
+        `user.classrooms.fetch` — voir `_rpc_all_pages` et cartographie-edumoov.md
+        §9) : le référentiel complet compte 18 entrées, pas 10 — un appel simple
+        via `rpc()` en aurait tronqué le tiers sans la moindre erreur."""
+        return await self._rpc_all_pages("core.grades.fetch", {})
 
     async def list_classroom_events(
         self,
@@ -601,20 +680,35 @@ class EdumoovClient:
 
     async def list_journal_schedules(self, user_id: str) -> Any:
         """Emploi du temps (créneaux hebdomadaires récurrents) d'un
-        enseignant. Schéma non confirmé (vide sur le compte de test)."""
-        return await self.rpc("user.clog_schedules.fetch", {"user_id": user_id})
+        enseignant. Schéma non confirmé (vide sur le compte de test).
+
+        Pagine via `_rpc_all_pages` par précaution (17/09/2026) : aucun paramètre
+        page/limit n'est exposé à l'appelant MCP ici, exactement le schéma qui a
+        fait disparaître 5 classes sur 15 pour `list_classrooms` avant correctif
+        (voir cartographie-edumoov.md §9) — vide aujourd'hui sur le compte de
+        test, mais un emploi du temps hebdomadaire réel peut dépasser 10
+        créneaux sans peine une fois l'année scolaire avancée."""
+        return await self._rpc_all_pages("user.clog_schedules.fetch", {"user_id": user_id})
 
     async def list_journal_slots(self, classroom_id: str) -> Any:
         """Créneaux horaires du cahier journal d'une classe (récréations,
         pause méridienne, etc., visibles dans la grille hebdomadaire).
-        Schéma non confirmé (vide sur le compte de test)."""
-        return await self.rpc("classroom.clog_slots.fetch", {"classroom_id": classroom_id})
+        Schéma non confirmé (vide sur le compte de test).
+
+        Pagine via `_rpc_all_pages` par précaution (17/09/2026) — même raisonnement
+        que `list_journal_schedules` ci-dessus."""
+        return await self._rpc_all_pages(
+            "classroom.clog_slots.fetch", {"classroom_id": classroom_id}
+        )
 
     async def list_journal_pedagroups(self, user_id: str) -> Any:
         """Groupes pédagogiques (sous-groupes d'élèves pour la
         différenciation) rattachés au cahier journal d'un enseignant. Schéma
-        non confirmé (vide sur le compte de test)."""
-        return await self.rpc("user.clog_pedagroups.fetch", {"user_id": user_id})
+        non confirmé (vide sur le compte de test).
+
+        Pagine via `_rpc_all_pages` par précaution (17/09/2026) — même raisonnement
+        que `list_journal_schedules` ci-dessus."""
+        return await self._rpc_all_pages("user.clog_pedagroups.fetch", {"user_id": user_id})
 
     # ------------------------------------------------------------------
     # Médias — GET api.edumoov.com/rpc/core.medias.file (endpoint atypique,
