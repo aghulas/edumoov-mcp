@@ -160,7 +160,14 @@ async def edumoov_school_get(school_id: str) -> Any:
 
 @mcp.tool()
 async def edumoov_school_teachers_list(school_id: str) -> Any:
-    """Annuaire des enseignants d'une école (id, nom, prénom, email)."""
+    """Annuaire des enseignants d'une école (id, nom, prénom, rôle).
+
+    ATTENTION (bug de description corrigé le 17/09/2026) : cette docstring
+    annonçait un champ "email" qui n'existe pas dans la source réelle
+    (user.classrooms.fetch(graph=["users"]) ne renvoie jamais de mail, voir
+    cartographie-edumoov.md §6.2 et client.py:list_school_teachers). Confirmé
+    en conditions réelles sur les 17 comptes de l'école : aucun n'a de champ
+    mail. Ne pas supposer d'email disponible via cet outil."""
     return await _get_client().list_school_teachers(school_id)
 
 
