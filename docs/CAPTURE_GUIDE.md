@@ -15,9 +15,9 @@ documenté.
 Dans un Terminal :
 
 ```bash
-cd ~/dev/edumoov-mcp-prototype/scripts
+cd ~/dev/edumoov-mcp/scripts
 mitmdump -s capture_addon.py \
-  --set edumoov_out=$HOME/dev/edumoov-mcp-prototype/captures/edumoov_capture.jsonl \
+  --set edumoov_out=$HOME/dev/edumoov-mcp/captures/edumoov_capture.jsonl \
   -p 8080
 ```
 
@@ -80,8 +80,8 @@ requête POST/PUT, pas seulement des GET.
 Ctrl+C dans le terminal mitmdump, puis :
 
 ```bash
-python3 ~/dev/edumoov-mcp-prototype/scripts/analyze_capture.py \
-  ~/dev/edumoov-mcp-prototype/captures/edumoov_capture.jsonl
+python3 ~/dev/edumoov-mcp/scripts/analyze_capture.py \
+  ~/dev/edumoov-mcp/captures/edumoov_capture.jsonl
 ```
 
 Ça génère `docs/api_inventory.md` (lisible) et `docs/api_inventory.json`
