@@ -52,7 +52,7 @@ peut-être déjà fait, vérifie dans Trousseau d'accès que le certificat
 Pour couvrir un maximum d'endpoints en un seul passage, navigue dans cet
 ordre (repris de la cartographie déjà faite) :
 
-**Direction** (`app.edumoov.com/direction/school/11777/...`)
+**Direction** (`app.edumoov.com/direction/school/<school_id>/...`)
 - [ ] Tableau de bord
 - [ ] Classes & Enseignants
 - [ ] Élèves et familles (attends le chargement complet)

@@ -1,7 +1,7 @@
 # edumoov-mcp (prototype)
 
-Serveur MCP en lecture seule vers des données Edumoov (école [ecole],
-[ville]), basé sur l'API non documentée identifiée par rétro-ingénierie —
+Serveur MCP en lecture seule vers des données Edumoov, basé sur l'API non
+documentée identifiée par rétro-ingénierie —
 voir `../docs/` et les docs `cartographie-edumoov.md` /
 `spec-connecteur-mcp-edumoov.md` du projet Claude "Edumoov" pour le contexte complet.
 

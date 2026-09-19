@@ -29,7 +29,7 @@ mcp = MCPServer(
     name="edumoov",
     title="Edumoov (prototype non officiel)",
     instructions=(
-        "Accès en lecture seule à des données Edumoov (école [ecole], [ville]) "
+        "Accès en lecture seule à des données Edumoov (un établissement scolaire) "
         "via une API non documentée, identifiée par rétro-ingénierie. Prototype personnel "
         "en attendant un accès officiel Edumoov — voir cartographie-edumoov.md et "
         "spec-connecteur-mcp-edumoov.md dans le projet Claude 'Edumoov' pour le contexte "
@@ -71,7 +71,7 @@ async def edumoov_classrooms_list() -> Any:
 async def edumoov_classroom_get(classroom_id: str) -> Any:
     """Récupère la fiche d'une classe Edumoov précise (école, niveaux, enseignant,
     effectif...). `classroom_id` est l'identifiant Edumoov interne de la classe
-    (visible dans les URLs, ex. '44571'), pas le n° ONDE/IDBE. Filtré côté client à
+    (visible dans les URLs, ex. '12345'), pas le n° ONDE/IDBE. Filtré côté client à
     partir de edumoov_classrooms_list (l'API ne filtre pas elle-même par id)."""
     return await _get_client().get_classroom(classroom_id)
 
@@ -154,7 +154,7 @@ async def edumoov_cartable_items_list(
 @mcp.tool()
 async def edumoov_school_get(school_id: str) -> Any:
     """Fiche d'un établissement (adresse, UAI, directeur...). `school_id` est
-    l'identifiant Edumoov interne de l'école (ex. '11777' pour [ecole])."""
+    l'identifiant Edumoov interne de l'école (ex. '12345')."""
     return await _get_client().get_school(school_id)
 
 

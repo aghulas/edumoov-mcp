@@ -128,7 +128,7 @@ class TestListMethodsUsePagination:
                 "(sans quoi l'API retombe sur limit=10 en silence, cause de "
                 "l'incident du 17/09/2026)"
             )
-            rows = [{"id": i, "school_id": 11777} for i in range(15)]
+            rows = [{"id": i, "school_id": 90001} for i in range(15)]
             return httpx.Response(
                 200,
                 json=_page(
@@ -177,12 +177,12 @@ class TestListMethodsUsePagination:
             page = body["params"]["page"]
             if page == 1:
                 rows = [
-                    {"id": i, "school_id": 11777, "users": [{"id": 1000 + i, "name": f"T{i}"}]}
+                    {"id": i, "school_id": 90001, "users": [{"id": 1000 + i, "name": f"T{i}"}]}
                     for i in range(10)
                 ]
             else:
                 rows = [
-                    {"id": i, "school_id": 11777, "users": [{"id": 1000 + i, "name": f"T{i}"}]}
+                    {"id": i, "school_id": 90001, "users": [{"id": 1000 + i, "name": f"T{i}"}]}
                     for i in range(10, 15)
                 ]
             return httpx.Response(200, json=_page(rows, page=page, limit=10, total=15))
@@ -190,6 +190,6 @@ class TestListMethodsUsePagination:
         respx.post("https://api.edumoov.com/rpc/user.classrooms.fetch").mock(
             side_effect=responder
         )
-        teachers = await client.list_school_teachers("11777")
+        teachers = await client.list_school_teachers("90001")
         assert len(teachers) == 15
         await client.aclose()

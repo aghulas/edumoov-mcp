@@ -87,7 +87,7 @@ class EdumoovClient:
         """Headers pour la couche REST legacy (www.edumoov.com).
 
         `X-Edumoov-Nosession: true` est INDISPENSABLE ici (constat empirique du
-        15/09/2026, via un export cURL DevTools de [prénom] — notre propre capture
+        15/09/2026, via un export cURL DevTools — notre propre capture
         mitmproxy redacte Authorization/Cookie donc on n'avait jamais pu le voir).
         Sans ce header, le backend renvoie 500 au lieu de 200 : il tente
         vraisemblablement un chemin d'auth basé sur une session/cookie (absente ici,
@@ -209,7 +209,7 @@ class EdumoovClient:
     async def list_classrooms(self, *, graph: list[str] | None = None) -> Any:
         """Toutes les classes visibles par l'utilisateur authentifié.
 
-        Constat empirique (15/09/2026, testé en conditions réelles par [prénom]) :
+        Constat empirique (15/09/2026, testé en conditions réelles) :
         `user.classrooms.fetch` IGNORE tout paramètre de FILTRAGE envoyé (ex. un
         `classroom_id` précis) — il renvoie la liste des classes accessibles au
         compte plutôt qu'une classe unique. Documenté aussi dans
@@ -348,7 +348,7 @@ class EdumoovClient:
         token) et `app` (quelle application — "educartable" observé dans un
         appel réel). Sans ces deux paramètres, HTTP 412 Precondition Failed.
         Confirmé via export DevTools d'un appel navigateur réussi :
-        {"params": {"id": 284395, "app": "educartable"}, "payload": {}}.
+        {"params": {"id": 12345, "app": "educartable"}, "payload": {}}.
         `user_id` retombe sur EDUMOOV_DEFAULT_USER_ID si non fourni."""
         resolved_user_id = user_id or SETTINGS.default_user_id
         if not resolved_user_id:

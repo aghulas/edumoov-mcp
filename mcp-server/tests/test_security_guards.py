@@ -19,10 +19,10 @@ class TestCheckAllowed:
         individuels des élèves (équivalent à un mot de passe de mineur) — voir
         cartographie-edumoov.md §6.1. Jamais accessible via ce connecteur."""
         with pytest.raises(ForbiddenEndpointError):
-            _check_allowed("core/classroom/44571/pupils/codes")
+            _check_allowed("core/classroom/90002/pupils/codes")
 
     def test_permits_normal_pupils_path(self):
-        _check_allowed("core/classroom/44571/pupils")  # ne doit rien lever
+        _check_allowed("core/classroom/90002/pupils")  # ne doit rien lever
 
     async def test_rest_get_blocks_before_any_network_call(self):
         """_check_allowed() doit être appelé AVANT toute tentative réseau/auth —
@@ -31,7 +31,7 @@ class TestCheckAllowed:
         respx.mock actif, c'est la preuve qu'aucune requête n'a été tentée."""
         client = client_module.EdumoovClient.__new__(client_module.EdumoovClient)
         with pytest.raises(ForbiddenEndpointError):
-            await client.rest_get("core/classroom/44571/pupils/codes")
+            await client.rest_get("core/classroom/90002/pupils/codes")
 
 
 def test_classroom_pupils_fetch_rpc_not_called_anywhere():

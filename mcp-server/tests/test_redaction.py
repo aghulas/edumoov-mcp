@@ -41,7 +41,7 @@ def test_redact_pupil_strips_sensitive_fields():
 
 async def test_pupils_list_redacts_by_default(monkeypatch):
     monkeypatch.setattr(server_module, "_get_client", lambda: _FakeClient([SAMPLE_PUPIL]))
-    result = await edumoov_classroom_pupils_list("44571")
+    result = await edumoov_classroom_pupils_list("90002")
     assert "ine" not in result[0]
     assert "birthday" not in result[0]
     assert result[0]["name"] == "Dupont"
@@ -49,7 +49,7 @@ async def test_pupils_list_redacts_by_default(monkeypatch):
 
 async def test_pupils_list_includes_sensitive_fields_when_requested(monkeypatch):
     monkeypatch.setattr(server_module, "_get_client", lambda: _FakeClient([SAMPLE_PUPIL]))
-    result = await edumoov_classroom_pupils_list("44571", include_sensitive_fields=True)
+    result = await edumoov_classroom_pupils_list("90002", include_sensitive_fields=True)
     assert result[0]["ine"] == "1234567890A"
     assert result[0]["birthday"] == "01/09/2020"
 
@@ -62,4 +62,4 @@ async def test_pupils_list_refuses_non_list_payload_instead_of_silent_passthroug
         server_module, "_get_client", lambda: _FakeClient({"success": True, "data": []})
     )
     with pytest.raises(TypeError):
-        await edumoov_classroom_pupils_list("44571")
+        await edumoov_classroom_pupils_list("90002")

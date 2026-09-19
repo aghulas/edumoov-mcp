@@ -43,12 +43,12 @@ class TestRpcEnvelope:
         enveloppe exacte, plusieurs endpoints RPC renvoient HTTP 412."""
         client = EdumoovClient(auth=fake_auth(tmp_path))
         route = respx.post("https://api.edumoov.com/rpc/school.schools.fetch").mock(
-            return_value=httpx.Response(200, json={"success": True, "data": {"id": 11777}})
+            return_value=httpx.Response(200, json={"success": True, "data": {"id": 90001}})
         )
-        result = await client.rpc("school.schools.fetch", {"school_id": "11777"})
-        assert result == {"id": 11777}
+        result = await client.rpc("school.schools.fetch", {"school_id": "90001"})
+        assert result == {"id": 90001}
         sent_body = json.loads(route.calls.last.request.content)
-        assert sent_body == {"params": {"school_id": "11777"}, "payload": {}}
+        assert sent_body == {"params": {"school_id": "90001"}, "payload": {}}
         await client.aclose()
 
     @respx.mock

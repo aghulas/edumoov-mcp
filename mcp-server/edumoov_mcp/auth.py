@@ -158,8 +158,8 @@ class KeycloakAuth:
 
         Contexte (cartographie-edumoov.md §6.8/§9, incident du 17/09/2026) : jusqu'ici,
         un refresh_token expiré faisait simplement échouer l'appel MCP en cours — sans
-        planification (`launchd`, explicitement écartée le 15/09/2026 puis reposée à
-        [prénom] le 17/09/2026), ce token pouvait rester périmé jusqu'au prochain usage.
+        planification (`launchd`, explicitement écartée le 15/09/2026 puis reposée le
+        17/09/2026), ce token pouvait rester périmé jusqu'au prochain usage.
         Plutôt que planifier un rafraîchissement périodique, ce correctif rend le
         rafraîchissement réactif : dès qu'un appel constate que le refresh_token ne
         fonctionne plus, il déclenche lui-même une réauth navigateur puis retente.
