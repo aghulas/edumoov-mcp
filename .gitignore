@@ -19,3 +19,5 @@ __pycache__/
 # Ne JAMAIS committer.
 docs/api_inventory.json
 docs/api_inventory.md
+
+.pytest_cache/

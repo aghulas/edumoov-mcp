@@ -2,7 +2,7 @@
 
 Serveur MCP en lecture seule vers des données Edumoov, basé sur l'API non
 documentée identifiée par rétro-ingénierie —
-voir `../docs/` et les docs `cartographie-edumoov.md` /
+voir `docs/` et les docs `cartographie-edumoov.md` /
 `spec-connecteur-mcp-edumoov.md` du projet Claude "Edumoov" pour le contexte complet.
 
 **Statut : prototype personnel.** Pas d'accès officiel Edumoov à ce stade (démarche en
@@ -12,10 +12,14 @@ avertissements CGU / droit des bases de données dans la cartographie.
 ## Installation
 
 ```bash
-cd mcp-server
 python3 -m venv .venv && source .venv/bin/activate   # ou l'équivalent avec ton outil habituel
 pip install -e .
 ```
+
+(Le code vit à la racine du dépôt depuis le 22/09/2026 — il était auparavant dans
+`mcp-server/`, déplacé pour que la structure soit identique à `charlemagne-mcp` et
+`ecoledirecte-admin-mcp`, ce qu'attend la config par défaut du Deployment Center
+Azure/GitHub Actions.)
 
 (Si `venv` échoue sur ta machine comme ça a été le cas dans mon bac à sable de capture,
 utilise `pip install --user -e .` à la place.)
@@ -60,6 +64,27 @@ Le serveur parle MCP en stdio — à enregistrer comme n'importe quel serveur MC
 dans Claude Desktop / Claude Code (config `mcpServers`, commande =
 `python -m edumoov_mcp` avec le bon `cwd`/`PYTHONPATH`, ou `edumoov-mcp` directement
 si installé avec `pip install -e .`).
+
+### Déploiement distant (Azure App Service, streamable-http)
+
+```bash
+python -m edumoov_mcp --transport streamable-http --host 0.0.0.0 --port 8003
+```
+
+Nécessite les variables d'environnement `MCP_ENTRA_TENANT_ID`, `MCP_ENTRA_APP_ID_URI`
+et optionnellement `MCP_ENTRA_ALLOWED_GROUP_ID` / `MCP_ENTRA_PUBLIC_URL` — voir le
+dépôt partagé `mcp-entra-auth`. Web App Azure cible : `edumoov-mcp-fontainebleau`,
+**port 8003** (`WEBSITES_PORT=8003`), Startup Command à poser dans Configuration →
+Stack settings :
+
+```
+python -m edumoov_mcp --transport streamable-http --host 0.0.0.0 --port 8003
+```
+
+**⚠️ Rappel du blocage connu avant toute mise en prod distante** : la réauthentification
+actuelle (`browser_auth.py`) pilote un navigateur Chromium non-headless — incompatible
+tel quel avec un App Service headless. Voir `spec-connecteur-mcp-edumoov.md` §8 pour le
+plan (démarrage en usage strictement personnel, jeton géré manuellement en attendant).
 
 ## Tests
 
