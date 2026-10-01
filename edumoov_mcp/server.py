@@ -315,15 +315,12 @@ async def edumoov_classroom_settings_get(
 
 @mcp.tool()
 async def edumoov_media_get_url(media_id: str, token: str | None = None) -> str:
-    """Résout un id de média Edumoov (ex. `logoFile`/`signatureFile` renvoyés par
-    edumoov_classroom_settings_get, ou tout autre média référencé ailleurs) en une
-    URL de téléchargement signée et temporaire.
-
-    ⚠️ Le paramètre `token` est optionnel et, d'après les tests effectués, n'est
-    pas vérifié par l'API pour les médias déjà testés : passe-le quand tu l'as
-    (il ne coûte rien), mais ne compte pas dessus comme un vrai contrôle d'accès.
-    Voir client.py:get_media_url et cartographie-edumoov.md §6.2 pour le détail
-    et l'implication sécurité (accès potentiellement non authentifié par id)."""
+    """Résout un id de média Edumoov en URL de téléchargement signée et
+    temporaire. Pour un média à id numérique (ex. `logoFile`/`signatureFile` de
+    edumoov_classroom_settings_get), passer le `token` présent dans l'URL qui le
+    référence : il est obligatoire depuis le correctif Edumoov du 16/09/2026
+    (sinon HTTP 404). Les médias à id UUID (photos du cahier de vie) répondent
+    encore sans token. Voir client.py:get_media_url."""
     return await _get_client().get_media_url(media_id, token=token)
 
 
@@ -333,22 +330,27 @@ async def edumoov_journal_lessons_list(
 ) -> Any:
     """Séances du cahier journal (cours/activités planifiés) d'un enseignant.
     ⚠️ Schéma non confirmé sur données réelles (compte de test sans séance
-    saisie en ce début d'année) — voir cartographie §6.6."""
+    saisie en ce début d'année) — voir cartographie §6.6. Revérifié le 01/10/2026 : vide pour
+    les 17 comptes de l'école vus par le compte direction (Journal non utilisé, ou
+    données d'un autre enseignant non visibles depuis ce compte)."""
     return await _get_client().list_journal_lessons(user_id, page=page, limit=limit)
 
 
 @mcp.tool()
 async def edumoov_journal_schedules_list(user_id: str) -> Any:
     """Emploi du temps (créneaux hebdomadaires récurrents) d'un enseignant.
-    ⚠️ Schéma non confirmé sur données réelles — voir cartographie §6.6."""
+    ⚠️ Schéma non confirmé sur données réelles — voir cartographie §6.6. Revérifié le 01/10/2026 : vide pour
+    les 17 comptes de l'école vus par le compte direction (Journal non utilisé, ou
+    données d'un autre enseignant non visibles depuis ce compte)."""
     return await _get_client().list_journal_schedules(user_id)
 
 
 @mcp.tool()
 async def edumoov_journal_slots_list(classroom_id: str) -> Any:
-    """Créneaux horaires du cahier journal d'une classe (récréations, pause
-    méridienne...). ⚠️ Schéma non confirmé sur données réelles — voir
-    cartographie §6.6."""
+    """Créneaux du cahier journal d'une classe (séances récurrentes de la grille :
+    name, subject_id, color, start, stop, location, content, json_content,
+    decloisonnement...). Schéma confirmé sur données réelles le 01/10/2026 (2 classes
+    sur 15 en ont)."""
     return await _get_client().list_journal_slots(classroom_id)
 
 
@@ -356,10 +358,12 @@ async def edumoov_journal_slots_list(classroom_id: str) -> Any:
 async def edumoov_journal_pedagroups_list(user_id: str) -> Any:
     """Groupes pédagogiques (sous-groupes d'élèves pour la différenciation)
     rattachés au cahier journal d'un enseignant. ⚠️ Schéma non confirmé sur
-    données réelles — voir cartographie §6.6."""
+    données réelles — voir cartographie §6.6. Revérifié le 01/10/2026 : vide pour
+    les 17 comptes de l'école vus par le compte direction (Journal non utilisé, ou
+    données d'un autre enseignant non visibles depuis ce compte)."""
     return await _get_client().list_journal_pedagroups(user_id)
 
 
 # Outils d'écriture (enregistrés sur le même serveur `mcp`) — import en fin de
 # module car write_tools importe `mcp` et `_get_client` d'ici.
-from . import write_tools  # noqa: E402,F401
+from . import school_tools, write_tools  # noqa: E402,F401

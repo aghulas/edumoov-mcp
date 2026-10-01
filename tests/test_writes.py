@@ -123,12 +123,12 @@ async def test_advert_prepare_create_draft_then_confirm(env):
     assert not create.called
     assert out["preview"]["status"] == "brouillon"
     assert out["preview"]["recipients"] == ["CP A", "CE1"]  # classes actives de l'école seulement
-    assert out["rpc"]["payload"]["visibility"] is None
+    assert out["request"]["payload"]["visibility"] is None
     res = await wt.edumoov_write_confirm(out["confirmation_token"])
     assert create.called
     sent = json.loads(create.calls.last.request.content)
     assert sent["params"] == {"school_id": 90001, "graph": ["recipients"]}
-    assert sent["payload"] == out["rpc"]["payload"]
+    assert sent["payload"] == out["request"]["payload"]
     assert sent["payload"]["recipients"] == [
         {"model": "Classroom", "key": 101},
         {"model": "Classroom", "key": 102},
@@ -144,7 +144,7 @@ async def test_advert_publish_now_warns(env):
     )
     assert out["preview"]["status"] == "publiée"
     assert any("IMMÉDIATE" in w for w in out["warnings"])
-    assert out["rpc"]["payload"]["visibility"].endswith("Z")
+    assert out["request"]["payload"]["visibility"].endswith("Z")
 
 
 @respx.mock

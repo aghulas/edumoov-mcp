@@ -158,6 +158,21 @@ Garde-fous : liste blanche des méthodes RPC (`writes.py`, revérifiée dans
 `client.rpc_write`), chemin `signatureFile` jamais modifiable, champs de classe en
 liste blanche, logs sur stderr sans contenu. Tests : `tests/test_writes.py`.
 
+## Lecture Direction ajoutée le 01/10/2026
+
+- `edumoov_appeals_stats(date, period="day"|"month", classroom_id)` et
+  `edumoov_appeals_list(start, stop, classroom_id)` — app Appel
+  (`school.pupilsappeals.stats` / `.fetch`). Écriture de l'appel volontairement non
+  exposée (registre réglementaire).
+- `edumoov_subscriptions_list(active_only=True)` — licences Livret / Cartable /
+  Journal par classe ou enseignant, jours avant expiration, facture associée
+  (`school.subscriptions.fetch`) ; codes d'accès jamais renvoyés.
+- `edumoov_media_get_url` : `token` obligatoire pour les médias à id numérique
+  depuis le correctif Edumoov du 16/09/2026 (sinon 404, message explicite).
+
+Infrastructure prête mais sans outil MCP à ce stade : écritures REST du Cartable
+(`client.rest_write`, liste blanche `writes.ALLOWED_REST_WRITES`).
+
 ## Premiers pas / à vérifier après le premier appel réel
 
 1. **Champs sensibles de `pupils`** : `config.py` liste des noms de champs

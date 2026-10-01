@@ -20,6 +20,7 @@ contenu d'une annonce ni une valeur de paramètre.
 """
 from __future__ import annotations
 
+import re
 import secrets
 import sys
 import time
@@ -46,6 +47,22 @@ ALLOWED_WRITE_METHODS: frozenset[str] = frozenset(
 )
 
 
+# Écritures REST legacy (www.edumoov.com/api/1.0) autorisées — Cartable : cahier de
+# liaison d'une classe et commentaires (01/10/2026, lus dans le bundle
+# static.edumoov.com/cartable puis validés en réel sur brouillon sans destinataire).
+ALLOWED_REST_WRITES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("POST", re.compile(r"^cartable/classroom/\d+/messages$")),
+    ("PUT", re.compile(r"^cartable/classroom/\d+/messages/[0-9a-f-]{36}$")),
+    ("DELETE", re.compile(r"^cartable/classroom/\d+/messages/[0-9a-f-]{36}$")),
+    ("POST", re.compile(r"^core/classroom/\d+/comments$")),
+    ("DELETE", re.compile(r"^core/classroom/\d+/comments/\d+/trash$")),
+)
+
+
+def rest_write_allowed(http_method: str, path: str) -> bool:
+    return any(m == http_method and rx.match(path) for m, rx in ALLOWED_REST_WRITES)
+
+
 class WritesDisabledError(RuntimeError):
     """Écriture demandée alors que EDUMOOV_ENABLE_WRITES n'est pas activé."""
 
@@ -63,6 +80,10 @@ class PendingWrite:
     preview: dict[str, Any]
     expires_at: float
     warnings: list[str] = field(default_factory=list)
+    # "rpc" (api.edumoov.com/rpc/<method>) ou "rest" (www.edumoov.com/api/1.0/<method>
+    # = chemin, avec http_method)
+    transport: str = "rpc"
+    http_method: str | None = None
 
 
 def _log(message: str) -> None:
@@ -101,10 +122,18 @@ class WriteGate:
         summary: str,
         preview: dict[str, Any],
         warnings: list[str] | None = None,
+        transport: str = "rpc",
+        http_method: str | None = None,
     ) -> dict[str, Any]:
         self.ensure_enabled()
-        if method not in ALLOWED_WRITE_METHODS:
-            raise ValueError(f"Méthode d'écriture non autorisée : {method!r}")
+        if transport == "rpc":
+            if method not in ALLOWED_WRITE_METHODS:
+                raise ValueError(f"Méthode d'écriture non autorisée : {method!r}")
+        elif transport == "rest":
+            if not http_method or not rest_write_allowed(http_method, method):
+                raise ValueError(f"Écriture REST non autorisée : {http_method} {method!r}")
+        else:
+            raise ValueError(f"Transport inconnu : {transport!r}")
         self._purge()
         token = secrets.token_urlsafe(16)
         pending = PendingWrite(
@@ -115,15 +144,22 @@ class WriteGate:
             preview=preview,
             expires_at=time.time() + self._ttl,
             warnings=list(warnings or []),
+            transport=transport,
+            http_method=http_method,
         )
         self._pending[token] = pending
-        _log(f"préparé {method} jeton={token[:6]}…")
+        label = f"{http_method} {method}" if transport == "rest" else method
+        _log(f"préparé {label} jeton={token[:6]}…")
         return {
             "status": "EN ATTENTE DE CONFIRMATION — rien n'a encore été modifié dans Edumoov",
             "summary": summary,
             "warnings": pending.warnings,
             "preview": preview,
-            "rpc": {"method": method, "params": params, "payload": payload},
+            "request": (
+                {"rest": f"{http_method} {method}", "params": params, "payload": payload}
+                if transport == "rest"
+                else {"rpc": method, "params": params, "payload": payload}
+            ),
             "confirmation_token": token,
             "expires_in_seconds": self._ttl,
             "next_step": (

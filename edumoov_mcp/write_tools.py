@@ -477,12 +477,18 @@ async def edumoov_write_confirm(confirmation_token: str) -> Any:
     qu'après avoir montré l'aperçu à l'utilisateur et obtenu son accord
     explicite. Jeton à usage unique, valable 10 minutes."""
     pending = _gate.pop(confirmation_token)
+    label = f"{pending.http_method} {pending.method}" if pending.transport == "rest" else pending.method
     try:
-        data = await _get_client().rpc_write(pending.method, pending.params, pending.payload)
+        if pending.transport == "rest":
+            data = await _get_client().rest_write(
+                pending.http_method or "", pending.method, pending.params, pending.payload
+            )
+        else:
+            data = await _get_client().rpc_write(pending.method, pending.params, pending.payload)
     except EdumoovApiError:
-        log_outcome(pending.method, False)
+        log_outcome(label, False)
         raise
-    log_outcome(pending.method, True)
+    log_outcome(label, True)
     result: dict[str, Any] = {"status": "effectué", "summary": pending.summary}
     if pending.method.startswith("school.messages.") and isinstance(data, dict):
         result["advert"] = {

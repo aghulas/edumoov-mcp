@@ -56,3 +56,15 @@ class TestGetMediaUrl:
         with pytest.raises(EdumoovApiError):
             await client.get_media_url("nope")
         await client.aclose()
+
+    @respx.mock
+    async def test_404_without_token_explains_token_requirement(self, tmp_path):
+        """Correctif Edumoov du 16/09/2026 (revérifié le 01/10/2026) : un média à
+        id numérique sans token renvoie 404 — le message doit orienter vers le
+        token plutôt que suggérer un id inexistant."""
+        client = EdumoovClient(auth=fake_auth(tmp_path))
+        respx.get(_URL).mock(return_value=httpx.Response(404))
+        with pytest.raises(EdumoovApiError, match="token"):
+            await client.get_media_url("9249729")
+        await client.aclose()
+

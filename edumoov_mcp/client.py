@@ -716,29 +716,22 @@ class EdumoovClient:
     # ------------------------------------------------------------------
     async def get_media_url(self, media_id: str, *, token: str | None = None) -> str:
         """Résout un id de média Edumoov en URL de téléchargement signée
-        (temporaire, hébergée sur storage.gra.cloud.ovh.net).
+        (temporaire, hébergée sur storage.gra.cloud.ovh.net ou filerz.edumoov.com).
 
-        Détails d'implémentation confirmés empiriquement (15/09/2026) :
-        - Ne JAMAIS envoyer de header `Authorization` sur cet endpoint précis :
-          un Bearer seul, sans `token` dans l'URL, provoque un HTTP 403 — à
-          l'inverse de tous les autres endpoints RPC. D'où l'appel HTTP direct
-          ci-dessous plutôt qu'un passage par `rpc()`/`_headers()`.
-        - Le `token` optionnel (récupéré, quand disponible, depuis un objet qui
-          référence déjà ce média — ex. `classroom.settings.get` →
-          `header.logoFile`/`signatures.signatureFile`) n'est PAS vérifié par le
-          endpoint pour les médias testés : un `id` seul, sans token ni aucune
-          authentification, a suffi à obtenir la même URL signée finale (id, bon
-          token, mauvais token et absence de token ont tous renvoyé exactement le
-          même HTTP 302 vers la même URL OVH, même `temp_url_sig`).
-
-        ⚠️ Implication sécurité, volontairement PAS exploitée plus avant ici :
-        si les `media_id` sont devinables/séquentiels (ce test n'a porté que sur
-        des ids déjà légitimement accessibles au compte authentifié — aucune
-        tentative d'énumération d'autres ids n'a été faite), n'importe qui
-        connaissant un `media_id` pourrait obtenir l'URL de téléchargement d'un
-        média sans être authentifié. Voir cartographie-edumoov.md §6.2 pour le
-        détail et la recommandation de signalement à Edumoov — ce connecteur ne
-        fait qu'exposer le comportement observé de l'API telle qu'elle est.
+        Comportement revérifié le 01/10/2026, après le correctif Edumoov du
+        16/09/2026 (ticket n°51164, cartographie-edumoov.md §6.9) :
+        - médias à id NUMÉRIQUE (logo, signature...) : `token` désormais
+          obligatoire et vérifié — sans token ou avec un mauvais token, HTTP 404
+          (volontairement identique à un id inexistant). Le token est fourni par
+          l'objet qui référence le média (ex. `classroom.settings.get` →
+          `header.logoFile` = `...core.medias.file?id=<id>&token=<token>`).
+        - médias à id UUID (photos du cahier de vie) : toujours accessibles avec
+          le seul id, sans token ni authentification (HTTP 302) — le correctif ne
+          les couvre pas. Constat signalé dans la doc projet, à remonter à
+          Edumoov ; ne pas exploiter au-delà de l'usage légitime.
+        - Ne JAMAIS envoyer de header `Authorization` sur cet endpoint : un Bearer
+          seul provoque un HTTP 403 (constat du 15/09/2026, inverse de tous les
+          autres endpoints RPC). D'où l'appel HTTP direct ci-dessous.
         """
         params: dict[str, Any] = {"id": media_id}
         if token:
@@ -751,9 +744,65 @@ class EdumoovClient:
         location = resp.headers.get("location")
         if resp.status_code in (301, 302, 303, 307, 308) and location:
             return location
+        if resp.status_code == 404 and not token:
+            raise EdumoovApiError(
+                "edumoov_media_get_url : HTTP 404 — pour un média à id numérique, le "
+                "paramètre `token` est obligatoire depuis le correctif Edumoov du "
+                "16/09/2026 (le récupérer dans l'URL qui référence le média, ex. "
+                "header.logoFile de edumoov_classroom_settings_get)."
+            )
         raise EdumoovApiError(
             f"edumoov_media_get_url : réponse inattendue (HTTP {resp.status_code}, "
             f"pas de redirection vers une URL signée)."
+        )
+
+    # ------------------------------------------------------------------
+    # Appel et licences (01/10/2026) — méthodes lues dans le bundle front
+    # app.edumoov.com (entité `appeals`, endpointName `pupilsappeals` ; entité
+    # `subscriptions`) puis validées en lecture réelle. Voir cartographie §6.11.
+    # ------------------------------------------------------------------
+    async def list_appeals(
+        self,
+        school_id: str,
+        *,
+        start: str,
+        stop: str,
+        classroom_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Lignes d'appel (une par élève et par demi-journée) d'une école sur une
+        période. Champs : pupil_id, classroom_id, date, pm, present, delay,
+        arrival, departure, eat/ate, study/studied, play/played, unjustified,
+        ignore, comment."""
+        query = [f"where:date:>=:{start}", f"andWhere:date:<=:{stop}"]
+        if classroom_id:
+            query.append(f"andWhere:classroom_id:=:{int(classroom_id)}")
+        return await self._rpc_all_pages(
+            "school.pupilsappeals.fetch",
+            {"school_id": int(school_id), "query": query},
+            page_size=500,
+        )
+
+    async def appeal_stats(
+        self,
+        school_id: str,
+        *,
+        date: str,
+        period: str = "day",
+        classroom_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Synthèse d'appel par classe et demi-journée (présents, absents,
+        cantine, étude, garderie, retards). `period` : day | month (`date` =
+        premier jour du mois pour month)."""
+        params: dict[str, Any] = {"school_id": int(school_id), "date": date, "period": period, "limit": 62}
+        if classroom_id:
+            params["classroom_id"] = int(classroom_id)
+        return await self.rpc("school.pupilsappeals.stats", params) or []
+
+    async def list_subscriptions(self, school_id: str) -> list[dict[str, Any]]:
+        """Licences de l'école (classes et enseignants), toutes années
+        confondues, avec la facture associée. Pagine (274 lignes au 01/10/2026)."""
+        return await self._rpc_all_pages(
+            "school.subscriptions.fetch", {"school_id": int(school_id)}, page_size=50
         )
 
     # ------------------------------------------------------------------
@@ -787,6 +836,47 @@ class EdumoovClient:
             error = body.get("error") if isinstance(body, dict) else None
             raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}, erreur={error}")
         return body.get("data")
+
+    async def rest_write(
+        self,
+        http_method: str,
+        path: str,
+        params: dict[str, Any] | None,
+        payload: dict[str, Any] | None,
+    ) -> Any:
+        """Écriture sur la couche REST legacy (Cartable). Même logique que
+        rpc_write : n'est appelé que par edumoov_write_confirm, liste blanche
+        revérifiée ici (writes.ALLOWED_REST_WRITES)."""
+        from .writes import rest_write_allowed
+
+        _check_allowed(path)
+        if not rest_write_allowed(http_method, path):
+            raise ForbiddenEndpointError(f"Écriture REST non autorisée : {http_method} {path!r}")
+        resp = await self._http.request(
+            http_method,
+            f"{SETTINGS.rest_base}/{path}",
+            params=_clean_params(params),
+            json=payload if http_method != "DELETE" else None,
+            headers=await self._rest_headers(),
+        )
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if resp.status_code not in (200, 201) or not isinstance(body, dict) or not body.get("success"):
+            detail = body.get("data") if isinstance(body, dict) else None
+            message = detail.get("message") if isinstance(detail, dict) else None
+            raise EdumoovApiError(f"{http_method} {path} : HTTP {resp.status_code} {message or ''}".strip())
+        return body.get("data")
+
+    async def get_cartable_message(self, classroom_id: str, message_id: str) -> dict[str, Any]:
+        """Un élément du cartable par son id (GET .../messages/{id})."""
+        envelope = await self.rest_get(
+            f"cartable/classroom/{classroom_id}/messages/{message_id}", {"classroom_id": classroom_id}
+        )
+        if isinstance(envelope, dict) and isinstance(envelope.get("data"), dict):
+            return envelope["data"]
+        raise EdumoovApiError("GET .../messages/{id} : réponse dans un format inattendu.")
 
     async def list_adverts(self, school_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
         """Annonces d'école (brouillons, programmées et publiées), plus récentes
