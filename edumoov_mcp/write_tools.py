@@ -497,6 +497,11 @@ async def edumoov_write_confirm(confirmation_token: str) -> Any:
             "status": _advert_status(data.get("visibility")),
             "visibility": data.get("visibility"),
         }
+    elif pending.transport == "rest" and isinstance(data, dict):
+        # Cartable : on renvoie l'identifiant et le statut, jamais le contenu.
+        result["item"] = {
+            k: data.get(k) for k in ("id", "type", "title", "visible", "recipients_count") if k in data
+        }
     return result
 
 

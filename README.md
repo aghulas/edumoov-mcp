@@ -170,8 +170,27 @@ liste blanche, logs sur stderr sans contenu. Tests : `tests/test_writes.py`.
 - `edumoov_media_get_url` : `token` obligatoire pour les médias à id numérique
   depuis le correctif Edumoov du 16/09/2026 (sinon 404, message explicite).
 
-Infrastructure prête mais sans outil MCP à ce stade : écritures REST du Cartable
-(`client.rest_write`, liste blanche `writes.ALLOWED_REST_WRITES`).
+## Cahier de liaison et commentaires (écriture, 01/10/2026)
+
+Module `cartable_write_tools.py`, même garde-fou que les annonces (aperçu + jeton,
+`edumoov_write_confirm`), écritures REST du Cartable via `client.rest_write` (liste
+blanche `writes.ALLOWED_REST_WRITES`).
+
+| Outil de préparation | Appel REST | Validé en réel (01/10, brouillon sans destinataire, classe 44571) |
+|---|---|---|
+| `edumoov_cahier_prepare_create` — toujours en **brouillon** ; `pupil_ids` (None = toute la classe), `message_type` info/alert, `commentable`, `acknowledgement` none/read/comment | `POST cartable/classroom/{id}/messages` | oui |
+| `edumoov_cahier_prepare_update` — titre, corps, destinataires, commentaires, accusé (PUT partiel) | `PUT …/messages/{uuid}` | oui (champs non envoyés conservés) |
+| `edumoov_cahier_prepare_visibility` — publish / unpublish (`{visible}`) | `PUT …/messages/{uuid}` | refus sans destinataire vérifié ; publication réelle non testée (notifierait les familles) |
+| `edumoov_cahier_prepare_delete` | `DELETE …/messages/{uuid}` | oui |
+| `edumoov_comment_prepare_create` — commentaire ou réponse (`reply_to_comment_id`) | `POST core/classroom/{id}/comments` | oui (commentaire + réponse) |
+| `edumoov_comment_prepare_delete` | `DELETE core/classroom/{id}/comments/{id}/trash` | oui (suppression « douce » : `deleted=true` reste dans le fil) |
+
+Garde-fous : classe active de l'école uniquement, destinataires limités aux élèves de
+la classe, message vérifié comme appartenant à la classe (`scope_key`), publication
+refusée sans destinataire, avertissement explicite (nombre d'élèves notifiés) pour
+toute publication ou modification d'un message déjà publié, retour de
+`edumoov_write_confirm` sans contenu (id, titre, statut). Tests :
+`tests/test_cartable_writes.py`.
 
 ## Premiers pas / à vérifier après le premier appel réel
 

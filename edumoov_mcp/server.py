@@ -34,7 +34,7 @@ mcp = MCPServer(
     instructions=(
         "Accès à des données Edumoov (un établissement scolaire) via une API non "
         "documentée, identifiée par rétro-ingénierie. Lecture libre. Écriture (annonces "
-        "d'école, réglages, fiches classe) UNIQUEMENT en deux temps : un outil *_prepare_* "
+        "d'école, cahier de liaison et commentaires, réglages, fiches classe) UNIQUEMENT en deux temps : un outil *_prepare_* "
         "renvoie un aperçu et un jeton ; montrer l'aperçu à l'utilisateur et n'appeler "
         "edumoov_write_confirm qu'après son accord explicite, jamais de ta propre initiative. "
         "Prototype personnel "
@@ -366,4 +366,4 @@ async def edumoov_journal_pedagroups_list(user_id: str) -> Any:
 
 # Outils d'écriture (enregistrés sur le même serveur `mcp`) — import en fin de
 # module car write_tools importe `mcp` et `_get_client` d'ici.
-from . import school_tools, write_tools  # noqa: E402,F401
+from . import cartable_write_tools, school_tools, write_tools  # noqa: E402,F401
