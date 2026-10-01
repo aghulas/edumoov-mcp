@@ -1,6 +1,6 @@
 # edumoov-mcp (prototype)
 
-Serveur MCP en lecture seule vers des données Edumoov, basé sur l'API non
+Serveur MCP (lecture, et écriture encadrée — voir « Écriture ») vers des données Edumoov, basé sur l'API non
 documentée identifiée par rétro-ingénierie —
 voir `docs/` et les docs `cartographie-edumoov.md` /
 `spec-connecteur-mcp-edumoov.md` du projet Claude "Edumoov" pour le contexte complet.
@@ -132,6 +132,32 @@ refresh_token du moment.
 Voir `spec-connecteur-mcp-edumoov.md` §3 pour la liste complète des outils prévus
 (non encore implémentés) et §4 pour les règles de sécurité appliquées.
 
+## Écriture (depuis le 30/09/2026)
+
+Désactivée par défaut. Pour l'activer en local (stdio uniquement — refusé en
+streamable-http) : `EDUMOOV_ENABLE_WRITES=1` dans l'`env` du serveur MCP, puis
+redémarrer le client MCP.
+
+Toujours en deux temps : un outil `*_prepare_*` vérifie la demande, renvoie un aperçu
+(avant → après, destinataires, avertissements) et un jeton à usage unique (10 min,
+`EDUMOOV_WRITE_CONFIRMATION_TTL`) ; seul `edumoov_write_confirm(jeton)` envoie l'appel
+— exactement celui prévisualisé. `edumoov_write_cancel`, `edumoov_write_pending_list`.
+
+| Outil de préparation | Méthode RPC | Validé en réel |
+|---|---|---|
+| `edumoov_advert_prepare_create` (brouillon par défaut, `publication="now"` ou date) | `school.messages.create` | oui (brouillon sans destinataire) |
+| `edumoov_advert_prepare_update` (titre, corps, classes) | `school.messages.update` | oui |
+| `edumoov_advert_prepare_visibility` (publish / schedule / unpublish) | `school.messages.update` | même méthode ; publication réelle non testée |
+| `edumoov_advert_prepare_delete` | `school.messages.delete` | oui |
+| `edumoov_settings_prepare_set` (user / classroom / school, fusion partielle) | `<scope>.settings.set` | user : aller-retour ; classroom : no-op ; school : non |
+| `edumoov_classroom_prepare_update` (name, inc, cartable_activated…) | `school.classrooms.update` | no-op |
+| `edumoov_classroom_prepare_teacher` (link / unlink) | `classroom.classrooms.link/unlink` | **non** |
+
+Lecture associée : `edumoov_adverts_list`, `edumoov_settings_get`.
+Garde-fous : liste blanche des méthodes RPC (`writes.py`, revérifiée dans
+`client.rpc_write`), chemin `signatureFile` jamais modifiable, champs de classe en
+liste blanche, logs sur stderr sans contenu. Tests : `tests/test_writes.py`.
+
 ## Premiers pas / à vérifier après le premier appel réel
 
 1. **Champs sensibles de `pupils`** : `config.py` liste des noms de champs
@@ -150,8 +176,8 @@ Voir `spec-connecteur-mcp-edumoov.md` §3 pour la liste complète des outils pr�
 
 ## Ce que ce prototype ne fait volontairement pas
 
-- Aucune écriture (pas de création d'annonce, réponse à un message, validation
-  d'appel...).
+- Aucune écriture directe : tout passe par aperçu + confirmation (voir « Écriture »).
+  Pas de cahier de liaison de classe, de réponse à un message ni de validation d'appel.
 - Ne rafraîchit jamais l'endpoint `POST .../pupils/codes` (codes d'accès individuels
   des élèves) — bloqué au niveau du client (`client.py`), pas seulement par
   l'absence d'outil MCP.

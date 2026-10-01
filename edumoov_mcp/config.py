@@ -52,6 +52,17 @@ class Settings:
         os.environ.get("EDUMOOV_BROWSER_REAUTH_TIMEOUT", "150")
     )
 
+    # --- Écritures (voir writes.py et spec §5) ---
+    # Désactivées par défaut : tant que EDUMOOV_ENABLE_WRITES ne vaut pas 1, tous les
+    # outils d'écriture refusent (préparation comprise). Même activées, chaque écriture
+    # passe par un aperçu + un jeton de confirmation à usage unique.
+    enable_writes: bool = os.environ.get("EDUMOOV_ENABLE_WRITES", "0").lower() in (
+        "1", "true", "oui", "yes"
+    )
+    write_confirmation_ttl_seconds: int = int(
+        os.environ.get("EDUMOOV_WRITE_CONFIRMATION_TTL", "600")
+    )
+
     # --- Identifiants "pivots" pratiques pour l'usage personnel (optionnels) ---
     # Permettent de ne pas avoir à les répéter à chaque appel d'outil si l'utilisateur
     # ne travaille que sur une école/classe. Un outil peut toujours les surcharger.

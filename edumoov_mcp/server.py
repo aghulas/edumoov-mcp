@@ -14,7 +14,10 @@
   - edumoov_media_get_url (résolution d'id média en URL signée — ⚠️ endpoint dont
     le contrôle d'accès s'est révélé faible en test, voir client.py:get_media_url)
 
-Aucun outil d'écriture. Aucun outil n'expose les codes d'accès élève (voir client.py).
+Écriture (30/09/2026) : outils `*_prepare_*` + `edumoov_write_confirm` définis dans
+write_tools.py — toujours en deux temps (aperçu puis confirmation), désactivés tant
+que EDUMOOV_ENABLE_WRITES n'est pas à 1. Aucun outil n'expose les codes d'accès élève
+(voir client.py).
 """
 from __future__ import annotations
 
@@ -29,8 +32,12 @@ mcp = MCPServer(
     name="edumoov",
     title="Edumoov (prototype non officiel)",
     instructions=(
-        "Accès en lecture seule à des données Edumoov (un établissement scolaire) "
-        "via une API non documentée, identifiée par rétro-ingénierie. Prototype personnel "
+        "Accès à des données Edumoov (un établissement scolaire) via une API non "
+        "documentée, identifiée par rétro-ingénierie. Lecture libre. Écriture (annonces "
+        "d'école, réglages, fiches classe) UNIQUEMENT en deux temps : un outil *_prepare_* "
+        "renvoie un aperçu et un jeton ; montrer l'aperçu à l'utilisateur et n'appeler "
+        "edumoov_write_confirm qu'après son accord explicite, jamais de ta propre initiative. "
+        "Prototype personnel "
         "en attendant un accès officiel Edumoov — voir cartographie-edumoov.md et "
         "spec-connecteur-mcp-edumoov.md dans le projet Claude 'Edumoov' pour le contexte "
         "complet, les limitations connues et les règles de sécurité appliquées."
@@ -351,3 +358,8 @@ async def edumoov_journal_pedagroups_list(user_id: str) -> Any:
     rattachés au cahier journal d'un enseignant. ⚠️ Schéma non confirmé sur
     données réelles — voir cartographie §6.6."""
     return await _get_client().list_journal_pedagroups(user_id)
+
+
+# Outils d'écriture (enregistrés sur le même serveur `mcp`) — import en fin de
+# module car write_tools importe `mcp` et `_get_client` d'ici.
+from . import write_tools  # noqa: E402,F401

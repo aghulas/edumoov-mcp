@@ -756,6 +756,72 @@ class EdumoovClient:
             f"pas de redirection vers une URL signée)."
         )
 
+    # ------------------------------------------------------------------
+    # Écriture (30/09/2026) — voir writes.py (garde-fou prévisualiser/confirmer)
+    # et cartographie-edumoov.md §6.11. Règle de nommage RPC lue dans le bundle
+    # front (`NG.rpc`) : `<scope.model>.<entité>.<action>`, et l'id du scope est
+    # injecté en paramètre `<scope.model>_id`. Ex. une annonce d'école =
+    # entité `messages` (type "advert") dans le scope `school` →
+    # `school.messages.create` avec `school_id`.
+    # ------------------------------------------------------------------
+    async def rpc_write(
+        self, method: str, params: dict[str, Any], payload: dict[str, Any]
+    ) -> Any:
+        """Envoie un appel RPC d'écriture. N'est appelé QUE par
+        edumoov_write_confirm, avec un appel préalablement prévisualisé et
+        présent dans la liste blanche de writes.py (revérifiée ici)."""
+        from .writes import ALLOWED_WRITE_METHODS
+
+        _check_allowed(method)
+        if method not in ALLOWED_WRITE_METHODS:
+            raise ForbiddenEndpointError(f"Méthode d'écriture non autorisée : {method!r}")
+        url = f"{SETTINGS.rpc_base}/{method}"
+        resp = await self._http.post(
+            url, json={"params": params, "payload": payload}, headers=await self._headers()
+        )
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if resp.status_code != 200 or not isinstance(body, dict) or not body.get("success"):
+            error = body.get("error") if isinstance(body, dict) else None
+            raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}, erreur={error}")
+        return body.get("data")
+
+    async def list_adverts(self, school_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Annonces d'école (brouillons, programmées et publiées), plus récentes
+        d'abord. `school.messages.fetch` filtré sur type=advert — validé le
+        30/09/2026. `visibility` null = brouillon, date future = programmée,
+        date passée = publiée (règle reprise du front : ei.status)."""
+        return await self.rpc(
+            "school.messages.fetch",
+            {
+                "school_id": int(school_id),
+                "graph": ["recipients"],
+                "query": ["where:type:=:advert"],
+                "orderBy": "created:desc",
+                "page": 1,
+                "limit": limit,
+            },
+        )
+
+    async def get_advert(self, school_id: str, advert_id: str) -> dict[str, Any]:
+        return await self.rpc(
+            "school.messages.get",
+            {"school_id": int(school_id), "id": advert_id, "graph": ["recipients"]},
+        )
+
+    async def get_scope_settings(
+        self, scope_model: str, scope_id: str, app: str, context: str = "all"
+    ) -> dict[str, Any]:
+        """Réglages effectifs d'un scope (user/classroom/school) pour une app,
+        sans les champs techniques `_stack`/`_contexts`."""
+        data = await self.rpc(
+            f"{scope_model}.settings.get",
+            {f"{scope_model}_id": int(scope_id), "app": app, "context": context},
+        )
+        return {k: v for k, v in (data or {}).items() if not str(k).startswith("_")}
+
 
 def _clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in (params or {}).items() if v is not None}

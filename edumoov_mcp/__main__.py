@@ -40,6 +40,19 @@ def main() -> None:
         mcp.run(transport="stdio")
         return
 
+    # Garde-fou (30/09/2026) : en mode distant, le connecteur agit avec le seul
+    # compte Edumoov configure (droits direction) pour tous les utilisateurs
+    # Copilot et le scope Entra est Edumoov.Read - les ecritures n'y sont donc
+    # jamais autorisees tant que l'authentification par utilisateur (spec §8.2)
+    # n'existe pas.
+    from .config import SETTINGS
+
+    if SETTINGS.enable_writes:
+        raise SystemExit(
+            "EDUMOOV_ENABLE_WRITES=1 est refuse en streamable-http : ecritures "
+            "reservees au mode stdio local (voir spec §5/§8.2)."
+        )
+
     # Auth Entra ID attachee juste avant run() - jamais pour stdio, qui n'en a pas
     # besoin (process local deja prive). Voir mcp_entra_auth.apply_entra_auth.
     from mcp_entra_auth import apply_entra_auth
