@@ -20,9 +20,9 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 ## 2. Rédiger
 
 - Vouvoiement, ton cordial et sobre, phrases courtes ; titre explicite (objet, date si événement).
+- Dates absolues plutôt que relatives (« le 30 septembre » plutôt que « hier ») : une annonce reste lue plusieurs jours.
 - Texte brut pour le cahier de liaison (paragraphes séparés par une ligne vide). Pas de données personnelles d'autres familles ou d'élèves dans un message collectif.
 - Indiquer qui contacter et comment (enseignant via Educartable, secrétariat via EcoleDirecte ou support@saintemarie-fontainebleau.fr pour les questions EcoleDirecte).
-- Dates absolues plutôt que relatives (« le 30 septembre » plutôt que « hier ») : une annonce reste lue plusieurs jours.
 - Montrer d'abord le texte à Rémi dans la conversation et l'ajuster avant toute préparation.
 
 ## 3. Destinataires
