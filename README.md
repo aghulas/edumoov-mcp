@@ -220,8 +220,8 @@ color}`, réponse HTTP 202 avec un job orchestrateur), suit le job par `user.job
 (statut 7 = terminé) puis télécharge l'archive zip produite (un PDF par type —
 appel, cantine, étude, périscolaire — et par mois). Ne modifie aucune donnée.
 
-- Fichier enregistré dans `EDUMOOV_DOWNLOAD_DIR` (obligatoire : sans lui l'outil
-  refuse, donc inactif sur un serveur distant), droits 600, jamais écrasé ;
+- Fichier enregistré dans `EDUMOOV_DOWNLOAD_DIR/registres` (variable obligatoire :
+  sans elle l'outil refuse, donc inactif sur un serveur distant), droits 600, jamais écrasé ;
   `extract=True` décompresse aussi l'archive (chemins de l'archive vérifiés).
 - L'URL de téléchargement (signée, valable 12 h sans authentification) n'est jamais
   renvoyée et sa signature est masquée dans les journaux httpx ; hôte limité à
@@ -231,6 +231,20 @@ appel, cantine, étude, périscolaire — et par mois). Ne modifie aucune donné
 - Délai d'attente du job : `EDUMOOV_JOB_TIMEOUT` (180 s par défaut).
 - Validé en réel le 04/10/2026 (une classe et les 15 classes, septembre 2026). Tests :
   `tests/test_registers.py`.
+
+### Feuilles d'appel : appel du jour et appel vierge (04/10/2026)
+
+`edumoov_appeal_sheet_download(kind="jour"|"vierge", date=None, classroom_ids=None,
+color=True)` — menu de téléchargement de Direction → Appel : « Appel du jour en
+couleur / noir et blanc » et « Appel vierge non daté ». Génération serveur par
+`<school|classroom>.jobs.tempPdf` (params `{app: "direction", <scope>_id}`, payload
+`{path: "/appeals/<AAAA-MM-JJ>/<color|grey|empty>", filename}`, job `pdf.temporary`),
+suivi du job puis téléchargement, comme pour les registres. `classroom_ids=None` : un
+PDF pour toute l'école ; sinon un PDF par classe (jobs lancés en parallèle). Fichiers
+dans `EDUMOOV_DOWNLOAD_DIR/appels` (`appel_<date>_<classe>.pdf`, `_nb` en noir et
+blanc, `appel_vierge_<classe>.pdf`). Le client n'accepte que ces chemins de PDF et
+les portées école/classe. Validé en réel le 04/10/2026 (école : 8 pages ; classe :
+1 page). Tests : `tests/test_registers.py`.
 
 ## Premiers pas / à vérifier après le premier appel réel
 

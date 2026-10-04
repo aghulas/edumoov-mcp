@@ -861,6 +861,40 @@ class EdumoovClient:
             raise EdumoovApiError(f"RPC {method} : aucun job dans la réponse.")
         return job
 
+    _PDF_PATH = re.compile(r"^/appeals/\d{4}-\d{2}-\d{2}/(color|grey|empty)$")
+
+    async def start_pdf_job(
+        self, scope_model: str, scope_id: str, *, app: str, path: str, filename: str
+    ) -> dict[str, Any]:
+        """Lance la génération serveur d'un PDF d'une page de l'app (job
+        orchestrateur `pdf.temporary`, `Job.apiTempPdf` du front) :
+        `<scope>.jobs.tempPdf`, params `{app, <scope>_id}`, payload `{path,
+        filename}`. Utilisé par Direction → Appel pour « Appel du jour en couleur /
+        noir et blanc » et « Appel vierge non daté » (path
+        `/appeals/<AAAA-MM-JJ>/<color|grey|empty>`), validé en réel le 04/10/2026
+        pour une classe et pour l'école. Seuls ces chemins sont autorisés ici."""
+        if scope_model not in ("school", "classroom"):
+            raise ForbiddenEndpointError(f"Portée de PDF non autorisée : {scope_model!r}")
+        if not self._PDF_PATH.match(path):
+            raise ForbiddenEndpointError(f"Chemin de PDF non autorisé : {path!r}")
+        method = f"{scope_model}.jobs.tempPdf"
+        resp = await self._http.post(
+            f"{SETTINGS.rpc_base}/{method}",
+            json={
+                "params": {"app": app, f"{scope_model}_id": int(scope_id)},
+                "payload": {"path": path, "filename": filename},
+            },
+            headers=await self._headers(),
+        )
+        body = resp.json() if resp.content else None
+        if resp.status_code not in (200, 202) or not isinstance(body, dict) or not body.get("success"):
+            error = body.get("error") if isinstance(body, dict) else None
+            raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}, erreur={error}")
+        job = body.get("data") or body.get("job")
+        if not isinstance(job, dict) or not job.get("id"):
+            raise EdumoovApiError(f"RPC {method} : aucun job dans la réponse.")
+        return job
+
     async def get_job(self, job_id: str) -> dict[str, Any]:
         """État d'un job orchestrateur de l'utilisateur (`user.jobs.get`, comme le
         front pour les PDF et les registres). Statuts : 3-6 en cours, 7 terminé,
