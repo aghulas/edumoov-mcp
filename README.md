@@ -162,8 +162,8 @@ liste blanche, logs sur stderr sans contenu. Tests : `tests/test_writes.py`.
 
 - `edumoov_appeals_stats(date, period="day"|"month", classroom_id)` et
   `edumoov_appeals_list(start, stop, classroom_id)` — app Appel
-  (`school.pupilsappeals.stats` / `.fetch`). Écriture de l'appel volontairement non
-  exposée (registre réglementaire).
+  (`school.pupilsappeals.stats` / `.fetch`). Écriture : voir « Appel (écriture,
+  04/10/2026) » plus bas.
 - `edumoov_subscriptions_list(active_only=True)` — licences Livret / Cartable /
   Journal par classe ou enseignant, jours avant expiration, facture associée
   (`school.subscriptions.fetch`) ; codes d'accès jamais renvoyés.
@@ -192,6 +192,46 @@ toute publication ou modification d'un message déjà publié, retour de
 `edumoov_write_confirm` sans contenu (id, titre, statut). Tests :
 `tests/test_cartable_writes.py`.
 
+## Appel (écriture, 04/10/2026)
+
+Modules `appeals.py` (logique pure : lignes du payload, motifs, rattachement des noms)
+et `appeal_write_tools.py`, même garde-fou que les annonces. Méthodes lues dans le
+bundle front (entité `appeals`, `endpointName: pupilsappeals`). L'appel a valeur de
+registre : chaque aperçu le rappelle.
+
+| Outil / script | Méthode RPC | Validé en réel |
+|---|---|---|
+| `edumoov_appeal_prepare_halfday(classroom_id, date, period am/pm, absent_pupil_ids, justification, eat/study/play_pupil_ids)` — création ou mise à jour d'une demi-journée (tous présents sauf absents ; pointages cantine / étude / périscolaire ; retards, motifs et pointages déjà saisis conservés ; élèves exclus de l'appel de la classe respectés ; date future refusée) | `classroom.pupilsappeals.batchUpsert` (params `{classroom_id}`, payload `{data, globalData: {date, pm, classroom_id}}`) | oui (04/10, appels de septembre 2026 des 15 classes) |
+| `edumoov_appeal_prepare_reset(classroom_id, date, period)` — supprimer l'appel d'une demi-journée | `classroom.pupilsappeals.resetDay` (`{classroom_id, date, am\|pm: true}`) | non |
+| `scripts/appel_lot.py lot.json [--confirm] [--remplacer]` — lot (ex. un mois saisi sur papier) : essai à blanc par défaut, noms rattachés aux élèves Edumoov (blocage si introuvable ou ambigu), demi-journées déjà saisies laissées telles quelles sauf `--remplacer`, journal sans nom d'élève | `classroom.pupilsappeals.batchUpsert` | oui (04/10) |
+
+Motifs d'absence : `pendingjustification` (À justifier, défaut du front),
+`unjustified`, `justified` (Motif légitime), `justifiedbut` (Autre motif). Hors liste
+blanche : justification seule (`school.pupilsappeals.update`). Tests :
+`tests/test_appeals.py`.
+
+### Registres d'appel (téléchargement, 04/10/2026)
+
+`edumoov_registers_download(months, classroom_ids=None, types=None, color=True,
+extract=False)` — équivalent de Direction → Appel → Registres (« Télécharger pour
+toutes les classes », ou une seule classe via `classroom_ids`). Lance
+`school.pupilsappeals.downloadRegisters` (payload `{types, months, classroomIds,
+color}`, réponse HTTP 202 avec un job orchestrateur), suit le job par `user.jobs.get`
+(statut 7 = terminé) puis télécharge l'archive zip produite (un PDF par type —
+appel, cantine, étude, périscolaire — et par mois). Ne modifie aucune donnée.
+
+- Fichier enregistré dans `EDUMOOV_DOWNLOAD_DIR` (obligatoire : sans lui l'outil
+  refuse, donc inactif sur un serveur distant), droits 600, jamais écrasé ;
+  `extract=True` décompresse aussi l'archive (chemins de l'archive vérifiés).
+- L'URL de téléchargement (signée, valable 12 h sans authentification) n'est jamais
+  renvoyée et sa signature est masquée dans les journaux httpx ; hôte limité à
+  `*.edumoov.com`.
+- Registres en couleur par défaut (choix de l'école) ; `color=False` pour le noir et
+  blanc, fichier suffixé `_nb`.
+- Délai d'attente du job : `EDUMOOV_JOB_TIMEOUT` (180 s par défaut).
+- Validé en réel le 04/10/2026 (une classe et les 15 classes, septembre 2026). Tests :
+  `tests/test_registers.py`.
+
 ## Premiers pas / à vérifier après le premier appel réel
 
 1. **Champs sensibles de `pupils`** : `config.py` liste des noms de champs
@@ -211,7 +251,7 @@ toute publication ou modification d'un message déjà publié, retour de
 ## Ce que ce prototype ne fait volontairement pas
 
 - Aucune écriture directe : tout passe par aperçu + confirmation (voir « Écriture »).
-  Pas de cahier de liaison de classe, de réponse à un message ni de validation d'appel.
+  Pas de justification d'absence seule.
 - Ne rafraîchit jamais l'endpoint `POST .../pupils/codes` (codes d'accès individuels
   des élèves) — bloqué au niveau du client (`client.py`), pas seulement par
   l'absence d'outil MCP.

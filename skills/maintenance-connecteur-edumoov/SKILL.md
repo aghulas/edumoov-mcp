@@ -17,7 +17,8 @@ description: "Modifier, tester, valider en réel, pousser et documenter le conne
 
 - Dépôt sur le Mac de Rémi : `/Users/remi/dev/edumoov-mcp` (venv `.venv`, installation éditable). Travailler sur place via Desktop Commander, jamais sur une copie dans le cloud. Ne pas confondre avec `~/dev/edumoov-mcp-prototype` (ancien dépôt).
 - Commencer par `git fetch` + `git status -sb`.
-- Modules : `client.py` (transport RPC/REST), `server.py` (outils de lecture, instructions MCP, imports en fin de fichier), `school_tools.py` (Appel, licences), `writes.py` (`WriteGate`, listes blanches), `write_tools.py` (annonces, réglages, classes, confirm/cancel), `cartable_write_tools.py` (cahier de liaison, commentaires).
+- Modules : `client.py` (transport RPC/REST, jobs orchestrateur, téléchargement de fichiers), `server.py` (outils de lecture, instructions MCP, imports en fin de fichier), `school_tools.py` (Appel en lecture, registres d'appel, licences), `writes.py` (`WriteGate`, listes blanches), `write_tools.py` (annonces, réglages, classes, confirm/cancel), `cartable_write_tools.py` (cahier de liaison, commentaires), `appeals.py` (logique pure de l'appel : lignes du payload, motifs, rattachement des noms) et `appeal_write_tools.py` (appel d'une demi-journée, suppression), `scripts/appel_lot.py` (chargement d'un lot d'appels, essai à blanc par défaut).
+- Opérations longues (registres, PDF) : la méthode RPC renvoie HTTP 202 `{success, job}` ; suivre avec `user.jobs.get {id}` (3-6 en cours, 7 terminé, sinon erreur) ; fichier = `result.download.url` (URL signée `filerz.edumoov.com`, 12 h, sans authentification).
 - Transport : RPC `POST api.edumoov.com/rpc/<scope>.<entité>.<action>` avec corps `{params, payload}` ; REST legacy `www.edumoov.com/api/1.0/...` avec `X-Edumoov-Nosession: true`. Pagination RPC : toujours passer `page`/`limit` explicites ou `_rpc_all_pages` (défaut silencieux à 10 lignes).
 - Découvrir une méthode : lire le bundle front public (`app.edumoov.com/assets/index-*.js`, ou `static.edumoov.com/cartable` pour le Cartable) ; nom = `<scope.model>.<entité ou endpointName>.<action>`. Bundles et scripts d'exploration hors dépôt, supprimés après usage.
 
@@ -25,7 +26,8 @@ description: "Modifier, tester, valider en réel, pousser et documenter le conne
 
 - Jamais d'outil exposant `pupils/codes` ni le champ `password` des élèves ; `ine`/`birthday` redactés par défaut.
 - Toute écriture passe par `WriteGate` : outil `*_prepare_*` (aperçu + jeton, aucune écriture) puis `edumoov_write_confirm`. Ajouter chaque nouvelle méthode à `ALLOWED_WRITE_METHODS` (RPC) ou `ALLOWED_REST_WRITES` (REST), revérifiées dans `client.rpc_write` / `client.rest_write`. Référencer le gate via `write_tools._gate` (jamais une copie importée) pour partager les jetons.
-- Écritures volontairement non exposées : appel (registre réglementaire), `signatureFile`.
+- Appel (registre réglementaire) : écriture exposée depuis le 04/10/2026, uniquement via `edumoov_appeal_prepare_*` + confirmation ou `scripts/appel_lot.py --confirm`, après accord explicite de Rémi ; toujours un essai à blanc puis un test sur une classe et une journée avant un lot. Jamais exposés : `school.pupilsappeals.update` seul, `batchDelete`, `signatureFile`.
+- Téléchargements : URL signées jamais renvoyées au client ni journalisées (filtre sur le logger `httpx`) ; fichiers enregistrés seulement dans `EDUMOOV_DOWNLOAD_DIR` (droits 600, jamais d'écrasement) ; outil refusé si la variable n'est pas définie (serveur distant).
 - Logs sur stderr uniquement (stdout = JSON-RPC), sans contenu de message ni jeton.
 - En `streamable-http` (Azure), le serveur refuse de démarrer si `EDUMOOV_ENABLE_WRITES=1` : ne jamais lever ce verrou tant que l'authentification par utilisateur (spec §8.2) n'existe pas.
 - Jamais de données réelles d'élèves, de familles ou d'enseignants dans un fichier versionné (y compris fichiers générés à partir de captures).
@@ -35,7 +37,7 @@ description: "Modifier, tester, valider en réel, pousser et documenter le conne
 - `.venv/bin/python -m pytest -q` : tous verts avant commit. Tests hors ligne (respx, `tests/_helpers.fake_auth`) pour chaque garde-fou : refus hors liste blanche, payload confirmé = payload prévisualisé, refus sans destinataire, périmètre école/classe. `SETTINGS` est un dataclass gelé : le patcher avec `dataclasses.replace`.
 - Vérifier que le serveur charge : compter les outils avec `asyncio.run(mcp.list_tools())`.
 - Validation réelle : charger l'`env` du serveur depuis `~/Library/Application Support/Claude/claude_desktop_config.json` (`mcpServers.edumoov.env`), puis script temporaire `.venv/bin/python` qui appelle les fonctions d'outils. N'afficher que des clés, statuts, compteurs et types — jamais de contenu de message ni de nom d'élève.
-- Écriture réelle : uniquement sur un **brouillon sans aucun destinataire** (classe de test 44571), puis suppression et vérification de l'absence. Jamais de publication réelle ni d'action touchant une famille sans accord explicite de Rémi pour ce cas précis. Supprimer le script temporaire ensuite.
+- Écriture réelle : uniquement sur un **brouillon sans aucun destinataire** (classe de test 44571), puis suppression et vérification de l'absence. Exception : l'appel, qui n'a pas de brouillon — test réel sur une demi-journée passée d'une classe, avec l'accord de Rémi, puis relecture (`edumoov_appeals_list`). Jamais de publication réelle ni d'action touchant une famille sans accord explicite de Rémi pour ce cas précis. Supprimer le script temporaire ensuite.
 
 ## Commit, push, déploiement
 

@@ -63,6 +63,13 @@ class Settings:
         os.environ.get("EDUMOOV_WRITE_CONFIRMATION_TTL", "600")
     )
 
+    # --- Téléchargements (registres d'appel...) ---
+    # Dossier LOCAL où enregistrer les fichiers générés par Edumoov. Non défini = les
+    # outils de téléchargement refusent (cas du serveur distant : pas de disque
+    # utilisateur, et l'URL signée Edumoov n'est jamais renvoyée au client).
+    download_dir: str | None = os.environ.get("EDUMOOV_DOWNLOAD_DIR")
+    job_timeout_seconds: int = int(os.environ.get("EDUMOOV_JOB_TIMEOUT", "180"))
+
     # --- Identifiants "pivots" pratiques pour l'usage personnel (optionnels) ---
     # Permettent de ne pas avoir à les répéter à chaque appel d'outil si l'utilisateur
     # ne travaille que sur une école/classe. Un outil peut toujours les surcharger.

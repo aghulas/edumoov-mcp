@@ -43,6 +43,9 @@ ALLOWED_WRITE_METHODS: frozenset[str] = frozenset(
         "school.classrooms.update",  # fiche classe — validé (no-op)
         "classroom.classrooms.link",  # affecter un enseignant à une classe — NON validé en réel
         "classroom.classrooms.unlink",  # retirer un enseignant d'une classe — NON validé en réel
+        # Appel (04/10/2026, bundle front, entité `appeals` / `pupilsappeals`) :
+        "classroom.pupilsappeals.batchUpsert",  # enregistrer / modifier l'appel d'une demi-journée
+        "classroom.pupilsappeals.resetDay",  # supprimer l'appel d'une demi-journée
     }
 )
 

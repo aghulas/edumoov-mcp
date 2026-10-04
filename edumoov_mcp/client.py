@@ -14,6 +14,8 @@ d'authentification élève (voir spec-connecteur-mcp-edumoov.md §3, dernière l
 from __future__ import annotations
 
 import datetime
+import logging
+import re
 from typing import Any, Iterable
 
 import httpx
@@ -25,6 +27,27 @@ from .config import SETTINGS
 # des élèves (équivalent à un mot de passe de mineur). Voir cartographie §6.1 et
 # spec §3 — aucun outil MCP ne doit jamais atteindre cet endpoint.
 _FORBIDDEN_PATH_MARKERS: tuple[str, ...] = ("pupils/codes",)
+
+
+class _RedactSignedUrls(logging.Filter):
+    """httpx journalise chaque requête avec son URL complète (niveau INFO) : on masque
+    la signature des URL de fichiers Edumoov (`temp_url_sig`, valable 12 h sans
+    authentification) pour qu'elle n'atterrisse jamais dans les journaux du client MCP."""
+
+    _RX = re.compile(r"\?[^\s\"']*temp_url_sig=[^\s\"']*")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args:
+            record.args = tuple(
+                self._RX.sub("?<signature masquée>", str(a)) if "temp_url_sig" in str(a) else a
+                for a in (record.args if isinstance(record.args, tuple) else (record.args,))
+            )
+        if isinstance(record.msg, str):
+            record.msg = self._RX.sub("?<signature masquée>", record.msg)
+        return True
+
+
+logging.getLogger("httpx").addFilter(_RedactSignedUrls())
 
 
 class ForbiddenEndpointError(RuntimeError):
@@ -797,6 +820,66 @@ class EdumoovClient:
         if classroom_id:
             params["classroom_id"] = int(classroom_id)
         return await self.rpc("school.pupilsappeals.stats", params) or []
+
+    async def start_registers_job(
+        self,
+        school_id: str,
+        *,
+        types: list[str],
+        months: list[str],
+        classroom_ids: list[int],
+        color: bool = False,
+    ) -> dict[str, Any]:
+        """Lance la génération des registres d'appel (Direction → Appel → Registres,
+        bouton « Télécharger pour toutes les classes »). Méthode lue dans le bundle
+        front (`Appeal.apiDownloadRegisters`, menu EDirectionRegistersDownloadMenu) et
+        validée en réel le 04/10/2026 : réponse HTTP 202 `{success, job}` (job
+        orchestrateur `appeal.downloadRegisters`), résultat = une archive zip avec un
+        PDF par type et par mois (appel/, cantine/, etude/, periscolaire/).
+        N'écrit aucune donnée d'appel."""
+        method = "school.pupilsappeals.downloadRegisters"
+        _check_allowed(method)
+        resp = await self._http.post(
+            f"{SETTINGS.rpc_base}/{method}",
+            json={
+                "params": {"school_id": int(school_id)},
+                "payload": {
+                    "types": types,
+                    "months": months,
+                    "classroomIds": [int(c) for c in classroom_ids],
+                    "color": bool(color),
+                },
+            },
+            headers=await self._headers(),
+        )
+        body = resp.json() if resp.content else None
+        if resp.status_code not in (200, 202) or not isinstance(body, dict) or not body.get("success"):
+            error = body.get("error") if isinstance(body, dict) else None
+            raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}, erreur={error}")
+        job = body.get("job") or body.get("data")
+        if not isinstance(job, dict) or not job.get("id"):
+            raise EdumoovApiError(f"RPC {method} : aucun job dans la réponse.")
+        return job
+
+    async def get_job(self, job_id: str) -> dict[str, Any]:
+        """État d'un job orchestrateur de l'utilisateur (`user.jobs.get`, comme le
+        front pour les PDF et les registres). Statuts : 3-6 en cours, 7 terminé,
+        1/2/8/9/10/12/13 en erreur (`Job.statusMap` du front)."""
+        return await self.rpc("user.jobs.get", {"id": job_id}) or {}
+
+    async def fetch_job_file(self, url: str) -> tuple[bytes, str | None]:
+        """Télécharge le fichier produit par un job (URL signée `filerz.edumoov.com`,
+        valable 12 h, sans authentification). Hôte vérifié : rien d'autre n'est
+        téléchargé."""
+        from urllib.parse import urlparse
+
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme != "https" or not (host == "edumoov.com" or host.endswith(".edumoov.com")):
+            raise ForbiddenEndpointError(f"Téléchargement refusé : hôte inattendu {host!r}.")
+        resp = await self._http.get(url, follow_redirects=True, timeout=120.0)
+        if resp.status_code != 200:
+            raise EdumoovApiError(f"Téléchargement du fichier : HTTP {resp.status_code}")
+        return resp.content, resp.headers.get("content-disposition")
 
     async def list_subscriptions(self, school_id: str) -> list[dict[str, Any]]:
         """Licences de l'école (classes et enseignants), toutes années

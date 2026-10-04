@@ -2,8 +2,9 @@
 licences/factures. Méthodes RPC lues dans le bundle front app.edumoov.com puis
 validées en lecture réelle (cartographie-edumoov.md §6.11).
 
-L'écriture de l'appel (`classroom.pupilsappeals.batchUpsert`, `resetDay`) est
-volontairement NON exposée : le registre d'appel a une valeur réglementaire.
+L'écriture de l'appel (`classroom.pupilsappeals.batchUpsert`, `resetDay`) est dans
+appeal_write_tools.py (04/10/2026), toujours en deux temps (aperçu puis
+confirmation) : le registre d'appel a une valeur réglementaire.
 """
 from __future__ import annotations
 
@@ -126,3 +127,176 @@ async def edumoov_subscriptions_list(
         )
     out.sort(key=lambda x: (x["days_until_expiration"] is None, x["days_until_expiration"] or 0))
     return out
+
+
+# ----------------------------------------------------------------------
+# Registres d'appel (04/10/2026)
+# ----------------------------------------------------------------------
+REGISTER_TYPES = {"appeal": "appel", "eat": "cantine", "study": "étude", "play": "périscolaire"}
+_TYPE_ALIASES = {
+    "appel": "appeal", "presence": "appeal", "présence": "appeal",
+    "cantine": "eat", "etude": "study", "étude": "study",
+    "periscolaire": "play", "périscolaire": "play", "garderie": "play",
+}
+JOB_RUNNING = (3, 4, 5, 6)
+JOB_DONE = 7
+
+
+def _register_types(types: list[str] | None) -> list[str]:
+    if not types:
+        return list(REGISTER_TYPES)
+    out = []
+    for t in types:
+        key = str(t).strip().lower()
+        key = _TYPE_ALIASES.get(key, key)
+        if key not in REGISTER_TYPES:
+            raise ValueError(f"Type de registre inconnu : {t!r}. Connus : {list(REGISTER_TYPES)} (ou appel, cantine, étude, périscolaire).")
+        if key not in out:
+            out.append(key)
+    return out
+
+
+def _register_months(months: list[str] | str) -> list[str]:
+    items = [months] if isinstance(months, str) else list(months or [])
+    if not items:
+        raise ValueError("Au moins un mois est requis (AAAA-MM).")
+    out = []
+    for m in items:
+        try:
+            day = datetime.date.fromisoformat(str(m)[:7] + "-01")
+        except ValueError as exc:
+            raise ValueError(f"Mois invalide : {m!r} (attendu AAAA-MM).") from exc
+        if day.isoformat() not in out:
+            out.append(day.isoformat())
+    return sorted(out)
+
+
+def _slug(text: str) -> str:
+    import re
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-")[:40] or "classe"
+
+
+def _free_path(folder, stem: str, ext: str):
+    path = folder / f"{stem}{ext}"
+    n = 2
+    while path.exists():
+        path = folder / f"{stem}_{n}{ext}"
+        n += 1
+    return path
+
+
+@mcp.tool()
+async def edumoov_registers_download(
+    months: list[str],
+    classroom_ids: list[str] | None = None,
+    types: list[str] | None = None,
+    color: bool = True,
+    extract: bool = False,
+    school_id: str | None = None,
+) -> Any:
+    """Télécharge les registres d'appel d'Edumoov (Direction → Appel →
+    Registres) et les enregistre dans le dossier local EDUMOOV_DOWNLOAD_DIR.
+    `months` : mois au format AAAA-MM ; `classroom_ids` : une ou plusieurs
+    classes (None = toutes les classes actives de l'école) ; `types` : appel,
+    cantine, étude, périscolaire (None = les quatre) ; `color` : registres en
+    couleur (défaut) ou, avec False, en noir et blanc (fichier suffixé « _nb »). Edumoov génère une archive zip (un PDF par type et par mois, toutes
+    classes réunies) ; `extract=True` la décompresse aussi dans un dossier voisin.
+    Renvoie le chemin du fichier et la liste des PDF — jamais l'URL de
+    téléchargement (signée, valable 12 h sans authentification). Ne modifie
+    aucune donnée d'appel."""
+    import asyncio
+    import io
+    import os
+    import pathlib
+    import zipfile
+
+    if not SETTINGS.download_dir:
+        raise ValueError(
+            "Téléchargement désactivé : définir EDUMOOV_DOWNLOAD_DIR (dossier local) dans "
+            "la configuration du serveur MCP (mode local uniquement)."
+        )
+    folder = pathlib.Path(SETTINGS.download_dir).expanduser()
+    folder.mkdir(parents=True, exist_ok=True)
+    sid = _school_id(school_id)
+    kinds = _register_types(types)
+    month_list = _register_months(months)
+    client = _get_client()
+    classrooms = {
+        int(c["id"]): c.get("name") or str(c["id"])
+        for c in await client.list_classrooms()
+        if str(c.get("school_id")) == sid and not c.get("release") and not c.get("deleted")
+    }
+    if classroom_ids is None:
+        ids = sorted(classrooms)
+    else:
+        ids = [int(x) for x in classroom_ids]
+        unknown = [i for i in ids if i not in classrooms]
+        if unknown:
+            raise ValueError(f"Classe(s) inconnue(s) pour l'école {sid} : {unknown}.")
+    if not ids:
+        raise ValueError("Aucune classe à exporter.")
+
+    job = await client.start_registers_job(sid, types=kinds, months=month_list, classroom_ids=ids, color=color)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + SETTINGS.job_timeout_seconds
+    status = job.get("status")
+    while status in JOB_RUNNING or status is None:
+        if loop.time() > deadline:
+            raise TimeoutError(
+                f"Génération des registres toujours en cours après {SETTINGS.job_timeout_seconds} s "
+                "(le fichier sera aussi proposé dans les notifications Edumoov)."
+            )
+        await asyncio.sleep(2)
+        job = await client.get_job(str(job["id"]))
+        status = job.get("status")
+    if status != JOB_DONE:
+        err = job.get("error")
+        msg = err.get("message") if isinstance(err, dict) else err
+        raise RuntimeError(f"Génération des registres en échec (statut {status}) : {msg or 'sans détail'}.")
+    url = ((job.get("result") or {}).get("download") or {}).get("url")
+    if not url:
+        raise RuntimeError("Job terminé sans fichier à télécharger.")
+    content, _ = await client.fetch_job_file(url)
+
+    month_part = month_list[0][:7] if len(month_list) == 1 else f"{month_list[0][:7]}_a_{month_list[-1][:7]}"
+    if classroom_ids is None:
+        who = "toutes-classes"
+    elif len(ids) <= 3:
+        who = "_".join(_slug(classrooms[i]) for i in ids)
+    else:
+        who = f"{len(ids)}-classes"
+    stem = f"registres_{month_part}_{who}" + ("" if color else "_nb")
+    path = _free_path(folder, stem, ".zip")
+    path.write_bytes(content)
+    os.chmod(path, 0o600)
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            names = [n for n in zf.namelist() if not n.endswith("/")]
+            extracted = None
+            if extract:
+                target = _free_path(folder, stem, "")
+                target.mkdir()
+                for n in names:
+                    dest = (target / n).resolve()
+                    if not str(dest).startswith(str(target.resolve()) + os.sep):
+                        raise ValueError(f"Chemin suspect dans l'archive : {n!r}")
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(zf.read(n))
+                    os.chmod(dest, 0o600)
+                extracted = str(target)
+    except zipfile.BadZipFile:
+        names, extracted = [], None
+    return {
+        "file": str(path),
+        "size": len(content),
+        "extracted_to": extracted,
+        "pdf_files": names,
+        "classrooms": [classrooms[i] for i in ids],
+        "months": [m[:7] for m in month_list],
+        "types": [REGISTER_TYPES[k] for k in kinds],
+        "color": bool(color),
+    }
