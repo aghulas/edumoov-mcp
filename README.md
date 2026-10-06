@@ -149,6 +149,7 @@ Toujours en deux temps : un outil `*_prepare_*` vérifie la demande, renvoie un 
 | `edumoov_advert_prepare_update` (titre, corps, classes) | `school.messages.update` | oui |
 | `edumoov_advert_prepare_visibility` (publish / schedule / unpublish) | `school.messages.update` | même méthode ; publication réelle non testée |
 | `edumoov_advert_prepare_delete` | `school.messages.delete` | oui |
+| `edumoov_advert_prepare_attach` — pièce jointe (pdf/png/jpg, 2 Mo, sous `EDUMOOV_ATTACH_ROOTS`, défaut ~/Charlemagne ; documents bancaires refusés) | `school.medias.url` puis POST multipart (`sig`, `payload`, `file`) sur filerz.edumoov.com | oui (06/10, brouillon) |
 | `edumoov_settings_prepare_set` (user / classroom / school, fusion partielle) | `<scope>.settings.set` | user : aller-retour ; classroom : no-op ; school : non |
 | `edumoov_classroom_prepare_update` (name, inc, cartable_activated…) | `school.classrooms.update` | no-op |
 | `edumoov_classroom_prepare_teacher` (link / unlink) | `classroom.classrooms.link/unlink` | **non** |
@@ -182,6 +183,7 @@ blanche `writes.ALLOWED_REST_WRITES`).
 | `edumoov_cahier_prepare_update` — titre, corps, destinataires, commentaires, accusé (PUT partiel) | `PUT …/messages/{uuid}` | oui (champs non envoyés conservés) |
 | `edumoov_cahier_prepare_visibility` — publish / unpublish (`{visible}`) | `PUT …/messages/{uuid}` | refus sans destinataire vérifié ; publication réelle non testée (notifierait les familles) |
 | `edumoov_cahier_prepare_delete` | `DELETE …/messages/{uuid}` | oui |
+| `edumoov_cahier_prepare_attach` — pièce jointe (pdf/png/jpg, 10 Mo, mêmes règles que les annonces) | `GET core/classroom/{id}/medias/url` puis POST multipart (`model=HomeworkMessage`, `key`, `sig`, `payload`, `file`) sur filerz.edumoov.com | oui (06/10, brouillon sans destinataire, puis brouillons CM2) |
 | `edumoov_comment_prepare_create` — commentaire ou réponse (`reply_to_comment_id`) | `POST core/classroom/{id}/comments` | oui (commentaire + réponse) |
 | `edumoov_comment_prepare_delete` | `DELETE core/classroom/{id}/comments/{id}/trash` | oui (suppression « douce » : `deleted=true` reste dans le fil) |
 

@@ -34,9 +34,11 @@ mcp = MCPServer(
     instructions=(
         "Accès à des données Edumoov (un établissement scolaire) via une API non "
         "documentée, identifiée par rétro-ingénierie. Lecture libre. Écriture (annonces "
-        "d'école, cahier de liaison et commentaires, réglages, fiches classe, appel) UNIQUEMENT en deux temps : un outil *_prepare_* "
+        "d'école, cahier de liaison et commentaires, pièces jointes, réglages, fiches classe, appel) UNIQUEMENT en deux temps : un outil *_prepare_* "
         "renvoie un aperçu et un jeton ; montrer l'aperçu à l'utilisateur et n'appeler "
         "edumoov_write_confirm qu'après son accord explicite, jamais de ta propre initiative. "
+        "Pour cibler certaines classes seulement, préférer le cahier de liaison de chaque classe : "
+        "l'interface d'une annonce d'école n'affiche pas ses classes destinataires. "
         "Prototype personnel "
         "en attendant un accès officiel Edumoov — voir cartographie-edumoov.md et "
         "spec-connecteur-mcp-edumoov.md dans le projet Claude 'Edumoov' pour le contexte "

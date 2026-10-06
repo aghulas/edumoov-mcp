@@ -46,6 +46,23 @@ ALLOWED_WRITE_METHODS: frozenset[str] = frozenset(
         # Appel (04/10/2026, bundle front, entité `appeals` / `pupilsappeals`) :
         "classroom.pupilsappeals.batchUpsert",  # enregistrer / modifier l'appel d'une demi-journée
         "classroom.pupilsappeals.resetDay",  # supprimer l'appel d'une demi-journée
+        # Pièce jointe d'une annonce (06/10/2026, bundle front : composant
+        # EAdvertView + useMedias) : URL signée d'envoi, puis POST multipart du
+        # fichier sur filerz.edumoov.com avec un lien primaire {model:"Message",
+        # key:<annonce>}. Transport "upload" uniquement (voir client.upload_media).
+        "school.medias.url",
+    }
+)
+
+# Méthodes utilisables avec le transport "upload" (signature + envoi de fichier).
+ALLOWED_UPLOAD_METHODS: frozenset[str] = frozenset(
+    {
+        "school.medias.url",
+        # Pièce jointe d'un message du cahier de liaison (06/10/2026, bundle
+        # cartable : composant add-files) : GET REST legacy
+        # core/classroom/{id}/medias/url, puis POST multipart sur filerz avec
+        # model="HomeworkMessage", key=<message>, sig, payload, file.
+        "core.classroom.medias.url",
     }
 )
 
@@ -87,6 +104,8 @@ class PendingWrite:
     # = chemin, avec http_method)
     transport: str = "rpc"
     http_method: str | None = None
+    # transport "upload" : fichier local envoyé à la confirmation
+    file_path: str | None = None
 
 
 def _log(message: str) -> None:
@@ -127,6 +146,7 @@ class WriteGate:
         warnings: list[str] | None = None,
         transport: str = "rpc",
         http_method: str | None = None,
+        file_path: str | None = None,
     ) -> dict[str, Any]:
         self.ensure_enabled()
         if transport == "rpc":
@@ -135,6 +155,9 @@ class WriteGate:
         elif transport == "rest":
             if not http_method or not rest_write_allowed(http_method, method):
                 raise ValueError(f"Écriture REST non autorisée : {http_method} {method!r}")
+        elif transport == "upload":
+            if method not in ALLOWED_UPLOAD_METHODS or not file_path:
+                raise ValueError(f"Envoi de fichier non autorisé : {method!r}")
         else:
             raise ValueError(f"Transport inconnu : {transport!r}")
         self._purge()
@@ -149,6 +172,7 @@ class WriteGate:
             warnings=list(warnings or []),
             transport=transport,
             http_method=http_method,
+            file_path=file_path,
         )
         self._pending[token] = pending
         label = f"{http_method} {method}" if transport == "rest" else method

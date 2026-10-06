@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import datetime
 import html
+import os
+import re
+from pathlib import Path
 from typing import Any
 
 from .client import EdumoovApiError
@@ -343,6 +346,73 @@ async def edumoov_advert_prepare_delete(advert_id: str, school_id: str | None = 
 
 
 # ----------------------------------------------------------------------
+# Pièce jointe d'une annonce (06/10/2026)
+# ----------------------------------------------------------------------
+ATTACH_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
+ATTACH_MAX_BYTES = 2 * 1024 * 1024  # limite du composant d'envoi de l'éditeur d'annonce
+ATTACH_BANCAIRE = re.compile(r"sepa|\brib\b|iban|mandat|pr[ée]l[èe]vement", re.I)
+
+
+def _attach_roots() -> list[Path]:
+    brut = os.environ.get("EDUMOOV_ATTACH_ROOTS") or str(Path.home() / "Charlemagne")
+    return [Path(x).expanduser().resolve() for x in brut.split(os.pathsep) if x.strip()]
+
+
+# Cahier de liaison : l'interface accepte 50 Mo ; on se limite à 10 Mo.
+CAHIER_ATTACH_MAX_BYTES = 10 * 1024 * 1024
+
+
+def check_attachment(fichier: str, max_bytes: int | None = None) -> Path:
+    p = Path(fichier).expanduser().resolve()
+    if not any(p == r or r in p.parents for r in _attach_roots()):
+        raise ValueError(f"Fichier hors des dossiers autorisés (EDUMOOV_ATTACH_ROOTS) : {p.name}")
+    if not p.is_file():
+        raise ValueError(f"Fichier introuvable : {p.name}")
+    if p.suffix.lower() not in ATTACH_EXTENSIONS:
+        raise ValueError(f"Type de fichier non accepté : {p.name} (pdf, png, jpg).")
+    if ATTACH_BANCAIRE.search(p.stem):
+        raise ValueError(f"Document bancaire refusé : {p.name}")
+    limite = max_bytes or ATTACH_MAX_BYTES
+    if p.stat().st_size > limite:
+        raise ValueError(f"Fichier trop volumineux (> {limite // (1024 * 1024)} Mo) : {p.name}")
+    return p
+
+
+@mcp.tool()
+async def edumoov_advert_prepare_attach(
+    advert_id: str, fichier: str, school_id: str | None = None
+) -> Any:
+    """PRÉPARE l'ajout d'une pièce jointe (PDF ou image, 2 Mo au plus) à une
+    annonce d'école existante, de préférence encore en brouillon. `fichier` =
+    chemin local sous EDUMOOV_ATTACH_ROOTS (défaut ~/Charlemagne) ; documents
+    bancaires refusés. Rien n'est envoyé avant edumoov_write_confirm. Sur une
+    annonce déjà publiée, la pièce jointe apparaît aussitôt aux familles."""
+    sid = _school_id(school_id)
+    p = check_attachment(fichier)
+    current = await _get_client().get_advert(sid, advert_id)
+    names = await _school_classrooms(sid)
+    advert = _advert_summary(current, names)
+    existantes = await _get_client().get_advert_medias(sid, advert_id)
+    warnings = []
+    if advert["status"] != "brouillon":
+        warnings.append("Annonce déjà diffusée : la pièce jointe sera visible immédiatement par les familles.")
+    if any((m.get("name") or "").lower() == p.name.lower() for m in existantes):
+        warnings.append("Un fichier du même nom est déjà joint à cette annonce.")
+    return _gate.prepare(
+        "school.medias.url",
+        {"school_id": int(sid)},
+        {"model": "Message", "key": advert_id, "links": []},
+        summary=f"Joindre « {p.name} » ({p.stat().st_size // 1024} Ko) à l'annonce « {current.get('title')} » "
+        f"({advert['status']})",
+        preview={"annonce": advert, "fichier": p.name, "taille_ko": p.stat().st_size // 1024,
+                 "pieces_jointes_existantes": [m.get("name") for m in existantes]},
+        warnings=warnings,
+        transport="upload",
+        file_path=str(p),
+    )
+
+
+# ----------------------------------------------------------------------
 # Paramètres (réglages utilisateur / classe / école)
 # ----------------------------------------------------------------------
 @mcp.tool()
@@ -479,6 +549,24 @@ async def edumoov_write_confirm(confirmation_token: str) -> Any:
     pending = _gate.pop(confirmation_token)
     label = f"{pending.http_method} {pending.method}" if pending.transport == "rest" else pending.method
     try:
+        if pending.transport == "upload":
+            cahier = pending.method == "core.classroom.medias.url"
+            # le fichier n'a pas changé de nature entre-temps
+            check_attachment(pending.file_path or "", CAHIER_ATTACH_MAX_BYTES if cahier else None)
+            media = await _get_client().upload_media(
+                pending.method, pending.params, pending.payload, pending.file_path or ""
+            )
+            log_outcome(label, True)
+            if cahier:
+                jointes = await _get_client().get_cartable_message_medias(
+                    str(pending.params.get("classroom_id")), pending.payload.get("key")
+                )
+                return {"status": "effectué", "summary": pending.summary, "media": media,
+                        "pieces_jointes_du_message": [m.get("name") for m in jointes]}
+            sid = str(pending.params.get("school_id"))
+            jointes = await _get_client().get_advert_medias(sid, pending.payload.get("key"))
+            return {"status": "effectué", "summary": pending.summary, "media": media,
+                    "pieces_jointes_de_l_annonce": [m.get("name") for m in jointes]}
         if pending.transport == "rest":
             data = await _get_client().rest_write(
                 pending.http_method or "", pending.method, pending.params, pending.payload

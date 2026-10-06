@@ -339,6 +339,39 @@ async def edumoov_cahier_prepare_delete(
 # ----------------------------------------------------------------------
 # Commentaires d'un message du cartable
 # ----------------------------------------------------------------------
+@mcp.tool()
+async def edumoov_cahier_prepare_attach(classroom_id: str, message_id: str, fichier: str) -> Any:
+    """PRÉPARE l'ajout d'une pièce jointe (PDF ou image, 10 Mo au plus) à un
+    message du cahier de liaison, de préférence encore en brouillon. `fichier`
+    = chemin local sous EDUMOOV_ATTACH_ROOTS (défaut ~/Charlemagne) ; documents
+    bancaires refusés. Rien n'est envoyé avant edumoov_write_confirm. Sur un
+    message déjà publié, la pièce jointe apparaît aussitôt aux familles."""
+    from .write_tools import CAHIER_ATTACH_MAX_BYTES, check_attachment
+
+    await _check_classroom(classroom_id, None)
+    p = check_attachment(fichier, CAHIER_ATTACH_MAX_BYTES)
+    message = await _get_message(classroom_id, message_id)
+    summary = _message_summary(message)
+    existantes = await _get_client().get_cartable_message_medias(classroom_id, message_id)
+    warnings = []
+    if summary.get("status") != "brouillon":
+        warnings.append("Message déjà publié : la pièce jointe sera visible immédiatement par les familles.")
+    if any((m.get("name") or "").lower() == p.stem.lower() for m in existantes):
+        warnings.append("Un fichier du même nom est déjà joint à ce message.")
+    return _wt._gate.prepare(
+        "core.classroom.medias.url",
+        {"classroom_id": int(classroom_id)},
+        {"model": "HomeworkMessage", "key": message_id},
+        summary=f"Joindre « {p.name} » ({p.stat().st_size // 1024} Ko) au message « {message.get('title')} » "
+        f"({summary.get('status')})",
+        preview={"message": summary, "fichier": p.name, "taille_ko": p.stat().st_size // 1024,
+                 "pieces_jointes_existantes": [m.get("name") for m in existantes]},
+        warnings=warnings,
+        transport="upload",
+        file_path=str(p),
+    )
+
+
 def _find_comment(comments: list[dict[str, Any]], comment_id: str) -> dict[str, Any] | None:
     for c in comments or []:
         if str(c.get("id")) == str(comment_id):

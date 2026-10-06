@@ -954,6 +954,90 @@ class EdumoovClient:
             raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}, erreur={error}")
         return body.get("data")
 
+    async def upload_media(
+        self, method: str, params: dict[str, Any], payload: dict[str, Any], file_path: str
+    ) -> dict[str, Any]:
+        """Envoie un fichier comme média Edumoov (pièce jointe d'une annonce).
+        N'est appelé QUE par edumoov_write_confirm (transport "upload").
+
+        1. RPC `school.medias.url` {params: {school_id, method:"POST", lts:false},
+           payload: {model, key, links}} → {url, sig, payload, expires, iat} ;
+        2. POST multipart vers `url` (hôte *.edumoov.com) : champs `sig`,
+           `payload`, puis `file` → JSON du média créé {id, name, size, ...}.
+        Le lien primaire (model/key) rattache le média à l'objet côté serveur.
+        L'URL signée n'est ni renvoyée ni journalisée."""
+        from pathlib import Path
+        from urllib.parse import urlparse
+
+        from .writes import ALLOWED_UPLOAD_METHODS
+
+        _check_allowed(method)
+        if method not in ALLOWED_UPLOAD_METHODS:
+            raise ForbiddenEndpointError(f"Envoi de fichier non autorisé : {method!r}")
+        extra_fields: dict[str, str] = {}
+        if method == "core.classroom.medias.url":
+            # Cahier de liaison (couche REST legacy) : le lien primaire est
+            # passé en champs du formulaire multipart, pas dans la signature.
+            classroom_id = int(params["classroom_id"])
+            body = await self.rest_get(f"core/classroom/{classroom_id}/medias/url")
+            if not isinstance(body, dict) or not body.get("success"):
+                raise EdumoovApiError("GET core/classroom/{id}/medias/url : réponse inattendue")
+            extra_fields = {"model": str(payload["model"]), "key": str(payload["key"])}
+        else:
+            sign_params = {**params, "method": "POST", "lts": False}
+            resp = await self._http.post(
+                f"{SETTINGS.rpc_base}/{method}",
+                json={"params": sign_params, "payload": payload},
+                headers=await self._headers(),
+            )
+            try:
+                body = resp.json()
+            except ValueError:
+                body = None
+            if resp.status_code != 200 or not isinstance(body, dict) or not body.get("success"):
+                raise EdumoovApiError(f"RPC {method} : HTTP {resp.status_code}")
+        data = body.get("data") or {}
+        url = data.get("url") or ""
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme != "https" or not (host == "edumoov.com" or host.endswith(".edumoov.com")):
+            raise EdumoovApiError("URL d'envoi inattendue (hôte hors edumoov.com) : envoi annulé.")
+        p = Path(file_path)
+        mime = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg"}.get(p.suffix.lower(), "application/octet-stream")
+        up = await self._http.post(
+            url,
+            data={**extra_fields, "sig": data.get("sig", ""), "payload": data.get("payload", "")},
+            files={"file": (p.name, p.read_bytes(), mime)},
+            timeout=120.0,
+        )
+        if up.status_code not in (200, 201):
+            raise EdumoovApiError(f"Envoi du fichier refusé (HTTP {up.status_code}).")
+        try:
+            media = up.json()
+        except ValueError as exc:
+            raise EdumoovApiError("Envoi du fichier : réponse non JSON.") from exc
+        if not isinstance(media, dict) or not media.get("id"):
+            raise EdumoovApiError("Envoi du fichier : réponse sans identifiant de média.")
+        return {k: media.get(k) for k in ("id", "name", "size", "extension", "type") if k in media}
+
+    async def get_cartable_message_medias(self, classroom_id: str, message_id: str) -> list[dict[str, Any]]:
+        """Médias rattachés à un message du cahier de liaison (relecture)."""
+        envelope = await self.rest_get(
+            f"core/classroom/{int(classroom_id)}/medias", {"link": f"message.{message_id}"}
+        )
+        rows = envelope.get("data") if isinstance(envelope, dict) else envelope
+        return [{k: m.get(k) for k in ("id", "name", "size", "extension")}
+                for m in (rows or []) if isinstance(m, dict)]
+
+    async def get_advert_medias(self, school_id: str, advert_id: str) -> list[dict[str, Any]]:
+        """Médias rattachés à une annonce (relecture après envoi)."""
+        data = await self.rpc(
+            "school.messages.get",
+            {"school_id": int(school_id), "id": advert_id, "graph": ["medias"]},
+        )
+        medias = (data or {}).get("medias") or []
+        return [{k: m.get(k) for k in ("id", "name", "size", "extension")} for m in medias if isinstance(m, dict)]
+
     async def rest_write(
         self,
         http_method: str,
