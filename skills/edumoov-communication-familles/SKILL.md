@@ -23,7 +23,7 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 
 - Vouvoiement, ton cordial et sobre, phrases courtes ; titre explicite (objet, date si événement).
 - Dates absolues plutôt que relatives (« le 30 septembre » plutôt que « hier ») : une annonce reste lue plusieurs jours.
-- Texte brut pour le cahier de liaison (paragraphes séparés par une ligne vide). Pas de données personnelles d'autres familles ou d'élèves dans un message collectif.
+- Texte brut pour le cahier de liaison (paragraphes séparés par une ligne vide). Si le brouillon risque d'être retouché dans l'interface, éviter les listes à sauts de ligne simples : l'éditeur convertit le texte en HTML et peut fusionner ces lignes (constaté le 06/10/2026) — une ligne vide entre chaque élément. Pas de données personnelles d'autres familles ou d'élèves dans un message collectif.
 - Indiquer qui contacter et comment (enseignant via Educartable, secrétariat via EcoleDirecte ou support@saintemarie-fontainebleau.fr pour les questions EcoleDirecte).
 - Si le même message part aussi par EcoleDirecte, reprendre le même texte en n'adaptant que la signature.
 - Montrer d'abord le texte à Rémi dans la conversation et l'ajuster avant toute préparation.
@@ -49,7 +49,8 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 4. Vérifier ensuite (`edumoov_adverts_list` ou `edumoov_cartable_items_list`), donner le statut à Rémi et l'inviter à contrôler l'affichage dans l'interface Educartable.
 
 - Une publication notifie immédiatement les familles : aucune publication de sa propre initiative, jamais de jeton confirmé par anticipation.
-- État de validation en réel : **publication immédiate d'une annonce d'école validée le 01/10/2026** (15 classes, affichage HTML et notification conformes) ; pièces jointes validées sur brouillon le 06/10/2026. Pas encore validés : publication programmée, dépublication, publication du cahier de liaison (premiers brouillons réels : invitation « Entrée en 6e », CM2 A et CM2 B, 06/10/2026) — pour une première, vérifier dans l'interface et signaler l'issue pour mettre à jour la spec (skill maintenance-connecteur-edumoov).
+- État de validation en réel : **publication immédiate d'une annonce d'école validée le 01/10/2026** (15 classes, affichage HTML et notification conformes) ; pièces jointes validées sur brouillon le 06/10/2026. **Cahier de liaison** : brouillons préparés par le connecteur (avec PDF joint) puis relus et publiés par la direction dans l'interface le 06/10/2026 (CM2 A et B, 30 familles chacune, accusés de lecture reçus) — chemin validé ; la publication par `edumoov_cahier_prepare_visibility` n'a pas encore servi en réel. Pas encore validés : publication programmée, dépublication — pour une première, vérifier dans l'interface et signaler l'issue pour mettre à jour la spec (skill maintenance-connecteur-edumoov).
+- Variante courante : préparer les brouillons et laisser la direction les relire et les publier elle-même dans Educartable ; prévenir Rémi avec un brouillon de mail à direction@ (vouvoiement).
 - Si les outils d'écriture refusent (`EDUMOOV_ENABLE_WRITES` absent, ou serveur Azure) : fournir le texte prêt à coller dans l'interface Educartable.
 
 ## 6. Corriger ou retirer

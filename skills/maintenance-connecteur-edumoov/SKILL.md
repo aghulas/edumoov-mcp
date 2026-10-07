@@ -53,3 +53,13 @@ description: "Modifier, tester, valider en réel, pousser et documenter le conne
 - `README.md` du dépôt (tableaux d'outils, colonne « validé en réel »), docstrings des outils (lus par Claude), instructions du serveur dans `server.py` si le périmètre d'écriture change.
 - Specs du projet (`project_read`, modifier, `project_write` du fichier entier) : statut + dernier commit + nombre d'outils/tests en tête ; tableau des méthodes et validation ; « Reste à faire » ; incidents et enseignements.
 - Si l'usage change, mettre à jour aussi la skill `edumoov-communication-familles`.
+
+## Skills et GitHub
+
+Chaque skill chargée dans Claude a sa source dans le dossier `skills/` d'un dépôt :
+- `edumoov-mcp` (public) : edumoov-communication-familles, edumoov-controle-rentree, maintenance-connecteur-edumoov ;
+- `ecoledirecte-admin-mcp` (public) : ecoledirecte-communication-familles, ecoledirecte-identifiants-familles, ecoledirecte-parametrage, maintenance-connecteur-ecoledirecte ;
+- `charlemagne-mcp` (public) : charlemagne-affectation-photos, charlemagne-import-infos-complementaires, charlemagne-import-mail-telephone ;
+- `charlemagne-tools` (privé, skills nominatives) : charlemagne-facturation, charlemagne-import-emploi-du-temps, charlemagne-serveur-aplim, charlemagne-personnel-annuaire, ecoledirecte-appel-primaire, edumoov-appel, fiches-forfaits-rentree, scans-documents-eleves.
+
+Une skill se modifie par une carte de proposition ; une fois qu'elle est enregistrée par Rémi, recopier le SKILL.md enregistré (copie synchronisée de la session) dans le dépôt, commiter et pousser, puis vérifier que les deux versions sont identiques (empreinte du corps). Une skill avec des données nominatives ou des chemins de serveur de l'école va dans `charlemagne-tools`, jamais dans un dépôt public. Vers le Mac : Desktop Commander `write_file` (créer le dossier avant ; mode `rewrite` pour remplacer un fichier existant).
