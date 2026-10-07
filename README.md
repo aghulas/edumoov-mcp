@@ -103,8 +103,11 @@ refresh_token du moment.
 
 - `tests/test_client_envelope.py` — dépaquetage de l'enveloppe REST
   (`_unwrap_rest_envelope`) et forme exacte de l'enveloppe RPC `{params, payload}`.
+- `tests/test_family_codes.py` — fiches codes familles : refus sans activation
+  locale, élèves hors classe refusés, codes absents de la réponse, fichier 600 jamais
+  écrasé, chemin dédié du client.
 - `tests/test_security_guards.py` — `_check_allowed` (endpoint `pupils/codes`
-  bloqué), et un garde-fou structurel qui échoue si `classroom.pupils.fetch`
+  bloqué hors chemin dédié), et un garde-fou structurel qui échoue si `classroom.pupils.fetch`
   (variante RPC avec un champ `password`, jamais utilisée volontairement) est un
   jour appelée sans revue explicite.
 - `tests/test_media_get_url.py` — comportement (atypique) de `core.medias.file` :
@@ -268,7 +271,12 @@ les portées école/classe. Validé en réel le 04/10/2026 (école : 8 pages ; c
 
 - Aucune écriture directe : tout passe par aperçu + confirmation (voir « Écriture »).
   Pas de justification d'absence seule.
-- Ne rafraîchit jamais l'endpoint `POST .../pupils/codes` (codes d'accès individuels
-  des élèves) — bloqué au niveau du client (`client.py`), pas seulement par
-  l'absence d'outil MCP.
+- Codes familles (`POST .../pupils/codes`, identifiant + mot de passe du portail
+  familles) : bloqués au niveau du client (`client.py`) sauf par le chemin dédié
+  `fetch_family_codes`, utilisé uniquement par `edumoov_family_codes_pdf` (07/10/2026) :
+  outil **local** (`EDUMOOV_DOWNLOAD_DIR` + `EDUMOOV_FAMILY_CODES=1`, jamais sur le
+  serveur distant), élèves de la classe seulement (30 au plus), **une fiche PDF par
+  élève** reproduisant le modèle Educartable (`EDUMOOV_DOWNLOAD_DIR/codes`, droits
+  600, jamais écrasée), à joindre au mail des seuls parents de l'élève. Les codes ne
+  sont jamais renvoyés par l'outil ni journalisés.
 - Ne stocke aucune donnée élève/famille au-delà du cache mémoire d'une requête.

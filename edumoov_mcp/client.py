@@ -8,8 +8,10 @@ Voir cartographie-edumoov.md §6 pour le détail :
   /cartable/classroom/{id}/messages, filtré par query params).
 
 Garde-fou de sécurité : `_FORBIDDEN_PATH_MARKERS` bloque au niveau du client, et pas
-seulement par omission côté outils MCP, tout endpoint qui exposerait un secret
-d'authentification élève (voir spec-connecteur-mcp-edumoov.md §3, dernière ligne).
+seulement par omission côté outils MCP, tout endpoint qui exposerait des codes d'accès
+(voir spec-connecteur-mcp-edumoov.md §3). Seule exception, depuis le 07/10/2026 :
+`fetch_family_codes`, chemin dédié vers les codes familles, réservé à l'outil local
+qui produit les fiches PDF à remettre aux parents (family_codes.py).
 """
 from __future__ import annotations
 
@@ -1069,6 +1071,30 @@ class EdumoovClient:
             message = detail.get("message") if isinstance(detail, dict) else None
             raise EdumoovApiError(f"{http_method} {path} : HTTP {resp.status_code} {message or ''}".strip())
         return body.get("data")
+
+    async def fetch_family_codes(self, classroom_id: str, pupil_ids: list[int]) -> list[dict[str, Any]]:
+        """Codes familles (identifiant + mot de passe du portail familles) des élèves
+        demandés : POST core/classroom/{id}/pupils/codes, payload = [id, …] — appel
+        du bouton « Exporter » de la page Codes familles. SEUL chemin autorisé vers
+        `pupils/codes` (le marqueur reste bloqué partout ailleurs) ; n'est appelé que
+        par family_codes.edumoov_family_codes_pdf, qui ne renvoie jamais les codes.
+        Réponse jamais journalisée."""
+        path = f"core/classroom/{int(classroom_id)}/pupils/codes"
+        resp = await self._http.post(
+            f"{SETTINGS.rest_base}/{path}",
+            json=[int(i) for i in pupil_ids],
+            headers=await self._rest_headers(),
+        )
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if resp.status_code not in (200, 201) or not isinstance(body, dict) or not body.get("success"):
+            raise EdumoovApiError(f"Codes familles : HTTP {resp.status_code}")
+        data = body.get("data")
+        if not isinstance(data, list):
+            raise EdumoovApiError("Codes familles : réponse dans un format inattendu.")
+        return [d for d in data if isinstance(d, dict)]
 
     async def get_cartable_message(self, classroom_id: str, message_id: str) -> dict[str, Any]:
         """Un élément du cartable par son id (GET .../messages/{id})."""

@@ -16,8 +16,8 @@
 
 Écriture (30/09/2026) : outils `*_prepare_*` + `edumoov_write_confirm` définis dans
 write_tools.py — toujours en deux temps (aperçu puis confirmation), désactivés tant
-que EDUMOOV_ENABLE_WRITES n'est pas à 1. Aucun outil n'expose les codes d'accès élève
-(voir client.py).
+que EDUMOOV_ENABLE_WRITES n'est pas à 1. Codes familles : uniquement en fiches PDF locales
+(family_codes.py, EDUMOOV_FAMILY_CODES=1), jamais renvoyés à l'appelant.
 """
 from __future__ import annotations
 
@@ -368,4 +368,4 @@ async def edumoov_journal_pedagroups_list(user_id: str) -> Any:
 
 # Outils d'écriture (enregistrés sur le même serveur `mcp`) — import en fin de
 # module car write_tools importe `mcp` et `_get_client` d'ici.
-from . import appeal_write_tools, cartable_write_tools, school_tools, write_tools  # noqa: E402,F401
+from . import appeal_write_tools, cartable_write_tools, family_codes, school_tools, write_tools  # noqa: E402,F401
