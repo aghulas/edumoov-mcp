@@ -53,7 +53,14 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 - Variante courante : préparer les brouillons et laisser la direction les relire et les publier elle-même dans Educartable ; prévenir Rémi avec un brouillon de mail à direction@ (vouvoiement).
 - Si les outils d'écriture refusent (`EDUMOOV_ENABLE_WRITES` absent, ou serveur Azure) : fournir le texte prêt à coller dans l'interface Educartable.
 
-## 6. Corriger ou retirer
+## 6. Familles sans compte Educartable : codes familles
+
+- Un message du cahier de liaison n'atteint pas un élève dont aucun parent n'est inscrit (liste `parents` vide dans `edumoov_classroom_pupils_list`). Pour ces familles : fiche des codes familles + mail.
+- `edumoov_family_codes_pdf(classroom_id, pupil_ids)` produit une fiche PDF par élève (même modèle que « Codes familles › Exporter en pdf » d'Educartable) dans `~/Charlemagne/edumoov/codes/`. Les codes n'apparaissent jamais dans la conversation : ne pas ouvrir ni recopier les fiches.
+- Mail aux parents de l'élève (adresses : `responsables_eleves` du connecteur Charlemagne), depuis support@saintemarie-fontainebleau.fr, secrétariat en copie cachée : Educartable est l'outil de communication entre les parents et l'enseignant(e), il faut activer le compte pour être informé et contacté ; rappel EcoleDirecte si besoin. Brouillon Outlook (Rémi choisit l'expéditeur support@ et envoie) ; la fiche de **cet** élève seulement est jointe à la main (le connecteur Microsoft 365 ne joint pas de fichier).
+- Avant d'écrire à une famille, vérifier dans Charlemagne que l'élève est toujours inscrit (`actif`) : un élève sorti peut rester visible dans EcoleDirecte (cas du 07/10/2026).
+
+## 7. Corriger ou retirer
 
 - Modifier : `edumoov_advert_prepare_update` / `edumoov_cahier_prepare_update` (un message déjà publié est modifié sous les yeux des familles — le signaler).
 - Retirer : `*_prepare_visibility` unpublish (les notifications déjà parties restent) ou `*_prepare_delete`.
