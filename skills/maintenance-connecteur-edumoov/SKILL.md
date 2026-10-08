@@ -45,6 +45,7 @@ description: "Modifier, tester, valider en réel, pousser et documenter le conne
 ## Commit, push, déploiement
 
 - Commit et push **uniquement quand Rémi le demande**. Commit en français, corps listant les changements et la validation réelle, puis les lignes d'attribution indiquées par la session courante.
+- Commit depuis le Mac (Desktop Commander) : l'outil peut refuser une commande dont le message de commit est écrit dedans (« Command not allowed », constaté le 08/10/2026 avec un message en heredoc contenant des balises `<div>`) — écrire le message dans un fichier temporaire (`write_file`), puis `git commit -F <fichier>`, et supprimer le fichier.
 - Fusion `--ff-only` dans `master` (`github.com/aghulas/edumoov-mcp`), push, suppression de la branche. Le push déclenche le workflow « Build and deploy Python app to Azure Web App - edumoov-mcp-fontainebleau ». Suivre avec `gh run list --limit 1` (depuis le Mac) jusqu'à `success` (plusieurs minutes).
 - Rappeler à Rémi de **quitter (Cmd+Q) et relancer Claude Desktop** : le processus MCP ne recharge pas le code à chaud.
 - Toute édition de `claude_desktop_config.json` : sauvegarde horodatée avant, validation JSON après (incident du 01/10/2026 : accolade en trop).
