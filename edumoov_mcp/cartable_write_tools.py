@@ -19,6 +19,7 @@ classes actives de l'école. Logs sans contenu (writes.py).
 from __future__ import annotations
 
 import datetime
+import html
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -89,6 +90,26 @@ def _message_summary(m: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def cahier_body_html(text: str) -> str:
+    """Texte brut → HTML au format de l'éditeur du cahier de liaison.
+
+    L'éditeur Edumoov affiche le corps en HTML : des retours à la ligne bruts
+    (\n) sont ignorés et tout le message s'affiche en un seul bloc (incident du
+    08/10/2026, relance EcoleDirecte : brouillons à remettre en forme à la main
+    avant publication). On reproduit ce que produit l'éditeur : première ligne
+    nue, puis une <div> par ligne, <div><br></div> pour une ligne vide.
+    """
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").strip("\n").split("\n")
+    esc = [html.escape(line.rstrip(), quote=False) for line in lines]
+    if not esc or esc == [""]:
+        return ""
+    return esc[0] + "".join(f"<div>{line}</div>" if line else "<div><br></div>" for line in esc[1:])
+
+
+def _body(body: str, body_is_html: bool) -> str:
+    return body if body_is_html else cahier_body_html(body)
+
+
 def _validate_text(title: str | None, body: str | None) -> None:
     if title is not None:
         if not title.strip():
@@ -133,6 +154,7 @@ async def edumoov_cahier_prepare_create(
     commentable: bool = True,
     acknowledgement: str = "none",
     school_id: str | None = None,
+    body_is_html: bool = False,
 ) -> Any:
     """PRÉPARE (n'envoie rien) un message du cahier de liaison d'une classe.
 
@@ -143,9 +165,13 @@ async def edumoov_cahier_prepare_create(
     - `commentable` : les familles peuvent répondre en commentaire.
     - `acknowledgement` : "none", "read" (accusé de lecture demandé) ou
       "comment" (réponse demandée).
-    - `body` en texte brut (format de la quasi-totalité des messages existants).
+    - `body` en texte brut, paragraphes séparés par une ligne vide : converti
+      en HTML au format de l'éditeur (une <div> par ligne) ; `body_is_html=True`
+      pour passer du HTML tel quel. Le texte brut non converti s'afficherait
+      en un seul bloc (incident du 08/10/2026).
     Renvoie un aperçu et un jeton à passer à edumoov_write_confirm après accord."""
     classroom_name = await _check_classroom(classroom_id, school_id)
+    body = _body(body, body_is_html)
     _validate_text(title, body)
     if message_type not in CAHIER_TYPES:
         raise ValueError(f"message_type doit être l'un de {CAHIER_TYPES}")
@@ -209,13 +235,18 @@ async def edumoov_cahier_prepare_update(
     commentable: bool | None = None,
     acknowledgement: str | None = None,
     school_id: str | None = None,
+    body_is_html: bool = False,
 ) -> Any:
     """PRÉPARE la modification d'un message du cahier de liaison (titre, corps,
     élèves destinataires, commentaires autorisés, accusé demandé). Ne change pas
     son statut de publication — voir edumoov_cahier_prepare_visibility.
     `pupil_ids` remplace toute la liste des destinataires s'il est fourni.
+    `body` en texte brut converti en HTML (comme à la création), sauf
+    `body_is_html=True`.
     Aperçu avant → après + jeton."""
     classroom_name = await _check_classroom(classroom_id, school_id)
+    if body is not None:
+        body = _body(body, body_is_html)
     _validate_text(title, body)
     current = await _get_message(classroom_id, message_id)
     payload: dict[str, Any] = {}

@@ -23,7 +23,7 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 
 - Vouvoiement, ton cordial et sobre, phrases courtes ; titre explicite (objet, date si événement).
 - Dates absolues plutôt que relatives (« le 30 septembre » plutôt que « hier ») : une annonce reste lue plusieurs jours.
-- Texte brut pour le cahier de liaison (paragraphes séparés par une ligne vide). Si le brouillon risque d'être retouché dans l'interface, éviter les listes à sauts de ligne simples : l'éditeur convertit le texte en HTML et peut fusionner ces lignes (constaté le 06/10/2026) — une ligne vide entre chaque élément. Pas de données personnelles d'autres familles ou d'élèves dans un message collectif.
+- Cahier de liaison : `body` en texte brut, paragraphes séparés par une ligne vide ; le connecteur le convertit en HTML au format de l'éditeur Educartable (une `<div>` par ligne, `<div><br></div>` pour une ligne vide — depuis le 08/10/2026). Du texte brut non converti s'affiche **en un seul bloc** : incident du 08/10/2026, les 15 brouillons de relance EcoleDirecte ont dû être remis en forme à la main par la direction avant publication. Ne pas mettre de balises dans un texte brut (elles seraient affichées telles quelles) ; HTML déjà prêt : `body_is_html=True`. Pas de données personnelles d'autres familles ou d'élèves dans un message collectif.
 - Indiquer qui contacter et comment (enseignant via Educartable, secrétariat via EcoleDirecte ou support@saintemarie-fontainebleau.fr pour les questions EcoleDirecte).
 - Si le même message part aussi par EcoleDirecte, reprendre le même texte en n'adaptant que la signature.
 - Montrer d'abord le texte à Rémi dans la conversation et l'ajuster avant toute préparation.
@@ -44,7 +44,7 @@ description: "Rédiger et diffuser un message aux familles dans Educartable (Edu
 ## 5. Diffuser en deux temps
 
 1. Préparer en **brouillon** (`publication="draft"` pour une annonce ; le cahier est toujours créé en brouillon), puis joindre les fichiers. Si Rémi a validé le texte et demandé la diffusion, la création du brouillon et l'ajout de la pièce jointe peuvent être confirmés sans attendre (aucune famille notifiée).
-2. Montrer l'aperçu complet (titre, texte, destinataires, pièces jointes, avertissements) ; n'appeler `edumoov_write_confirm` pour la publication qu'après un « oui » explicite de Rémi.
+2. Relire le brouillon créé (`edumoov_cartable_items_list` de la classe) : le `body` doit contenir des `<div>` (sinon il s'affichera en un seul bloc) ; inviter la direction à jeter un œil à la mise en page dans l'interface avant de publier. Montrer l'aperçu complet (titre, texte, destinataires, pièces jointes, avertissements) ; n'appeler `edumoov_write_confirm` pour la publication qu'après un « oui » explicite de Rémi.
 3. Publier par une seconde préparation (`edumoov_advert_prepare_visibility` publish/schedule, ou `edumoov_cahier_prepare_visibility` publish), avec le nombre de familles notifiées affiché, puis nouvelle confirmation explicite. Le jeton expire au bout de 10 minutes : en cas de délai, re-préparer.
 4. Vérifier ensuite (`edumoov_adverts_list` ou `edumoov_cartable_items_list`), donner le statut à Rémi et l'inviter à contrôler l'affichage dans l'interface Educartable.
 

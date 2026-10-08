@@ -235,3 +235,29 @@ async def test_comment_delete_nested_found(env):
     assert out["request"]["rest"] == "DELETE core/classroom/101/comments/8/trash"
     with pytest.raises(ValueError):
         await cwt.edumoov_comment_prepare_delete("101", MSG, "42")
+
+
+# ------------------------------------------------- mise en forme du corps
+def test_cahier_body_html_editor_format():
+    txt = "Madame, Monsieur,\n\nLigne 1 <b>\nLigne 2\n\nLa direction"
+    assert cwt.cahier_body_html(txt) == (
+        "Madame, Monsieur,<div><br></div><div>Ligne 1 &lt;b&gt;</div>"
+        "<div>Ligne 2</div><div><br></div><div>La direction</div>"
+    )
+    assert cwt.cahier_body_html("Une ligne") == "Une ligne"
+    assert cwt.cahier_body_html("a\r\nb\n") == "a<div>b</div>"
+
+
+@respx.mock
+async def test_create_converts_plain_text_to_html(env):
+    out = await cwt.edumoov_cahier_prepare_create("101", "T", "Bonjour,\n\nTexte")
+    assert out["request"]["payload"]["body"] == "Bonjour,<div><br></div><div>Texte</div>"
+    out = await cwt.edumoov_cahier_prepare_create("101", "T", "<div>Déjà</div>", body_is_html=True)
+    assert out["request"]["payload"]["body"] == "<div>Déjà</div>"
+
+
+@respx.mock
+async def test_update_converts_plain_text_to_html(env):
+    _mock_get(_message())
+    out = await cwt.edumoov_cahier_prepare_update("101", MSG, body="A\nB")
+    assert out["request"]["payload"]["body"] == "A<div>B</div>"
