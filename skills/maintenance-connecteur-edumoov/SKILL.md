@@ -9,6 +9,18 @@ description: Modifier, tester, valider en réel, pousser et documenter le connec
 
 À utiliser pour toute évolution du serveur MCP `edumoov` (Educartable, Livret, Journal, Appel, Cartable…) : nouvel outil de lecture ou d'écriture, correctif, découverte d'un endpoint, revérification d'un comportement Edumoov.
 
+## Branches, CI et fusion (à lire d'abord)
+
+Plusieurs sessions travaillent sur ce dépôt : suivre `CLAUDE.md` à la racine du dépôt.
+
+- Ne rien modifier dans `~/dev/edumoov-mcp` ni sur la branche principale : une tâche = une branche `claude/<sujet>` dans son
+  propre dossier (`git worktree`).
+- Travail prêt : push de la branche puis pull request. Le CI GitHub (tests, skills, secrets) la fusionne s'il est vert,
+  puis les marketplaces sont régénérées et poussées automatiquement.
+- Ne pas lancer `generer_catalogues.py --ecrire`, ne rien pousser dans un dépôt `*-marketplace`, ne pas proposer de carte
+  de skill.
+- Là où cette skill dit « commit, push », lire : commit sur la branche, push de la branche, pull request.
+
 ## Contexte à relire d'abord
 
 - `README.md` du dépôt et, si vous en tenez, les specs du connecteur (authentification, outils, écriture, cartographie de l'API, incidents).
